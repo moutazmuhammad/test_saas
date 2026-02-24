@@ -1,0 +1,20 @@
+services:
+
+  odoo:
+    image: {{ odoo_image | default("odoo") }}:{{ odoo_version }}
+    container_name: odoo_{{ subdomain }}
+    restart: always
+    ports:
+      - "{{ host_ip | default('127.0.0.1') }}:{{ xmlrpc_port }}:8069"
+      - "{{ host_ip | default('127.0.0.1') }}:{{ longpolling_port }}:8072"
+    volumes:
+      - ./data/odoo:/var/lib/odoo
+      - ./config:/etc/odoo
+      - ./addons:/mnt/extra-addons
+    networks:
+      - {{ network_name | default("net") }}
+
+
+networks:
+  {{ network_name | default("net") }}:
+    driver: bridge

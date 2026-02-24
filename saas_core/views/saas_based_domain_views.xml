@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Form View -->
+    <record id="saas_based_domain_view_form" model="ir.ui.view">
+        <field name="name">saas.based.domain.form</field>
+        <field name="model">saas.based.domain</field>
+        <field name="arch" type="xml">
+            <form string="Based Domain">
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name" placeholder="e.g. example.com"/>
+                        </h1>
+                    </div>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- List View -->
+    <record id="saas_based_domain_view_list" model="ir.ui.view">
+        <field name="name">saas.based.domain.list</field>
+        <field name="model">saas.based.domain</field>
+        <field name="arch" type="xml">
+            <list string="Based Domains">
+                <field name="name"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="saas_based_domain_view_search" model="ir.ui.view">
+        <field name="name">saas.based.domain.search</field>
+        <field name="model">saas.based.domain</field>
+        <field name="arch" type="xml">
+            <search string="Search Based Domains">
+                <field name="name"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="saas_odoo_based_domain_action" model="ir.actions.act_window">
+        <field name="name">Based Domain</field>
+        <field name="res_model">saas.based.domain</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="saas_based_domain_view_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Add your first based domain
+            </p>
+        </field>
+    </record>
+
+</odoo>

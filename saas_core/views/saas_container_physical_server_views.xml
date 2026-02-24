@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Form View -->
+    <record id="saas_physical_server_view_form" model="ir.ui.view">
+        <field name="name">saas.container.physical.server.form</field>
+        <field name="model">saas.container.physical.server</field>
+        <field name="arch" type="xml">
+            <form string="Container Physical Server">
+                <header>
+                    <button name="action_test_connection"
+                            string="Test Connection"
+                            type="object"
+                            class="oe_highlight"/>
+                </header>
+                <sheet>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1>
+                            <field name="name" placeholder="e.g. main"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="ssh_key_pair_id"/>
+                            <field name="ssh_user"/>
+                            <field name="ssh_port"/>
+                            <field name="ip_v4"/>
+                            <field name="docker_base_path"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- List View -->
+    <record id="saas_physical_server_view_list" model="ir.ui.view">
+        <field name="name">saas.container.physical.server.list</field>
+        <field name="model">saas.container.physical.server</field>
+        <field name="arch" type="xml">
+            <list string="Container Physical Servers">
+                <field name="name"/>
+                <field name="ssh_key_pair_id"/>
+                <field name="ssh_port"/>
+                <field name="ip_v4"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Search View -->
+    <record id="saas_physical_server_view_search" model="ir.ui.view">
+        <field name="name">saas.container.physical.server.search</field>
+        <field name="model">saas.container.physical.server</field>
+        <field name="arch" type="xml">
+            <search string="Search Container Physical Servers">
+                <field name="name"/>
+                <field name="ssh_key_pair_id"/>
+            </search>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="saas_physical_server_action" model="ir.actions.act_window">
+        <field name="name">Container Physical Servers</field>
+        <field name="res_model">saas.container.physical.server</field>
+        <field name="view_mode">list,form</field>
+        <field name="search_view_id" ref="saas_physical_server_view_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Add your first container physical server
+            </p>
+        </field>
+    </record>
+
+</odoo>

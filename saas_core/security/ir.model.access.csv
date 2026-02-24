@@ -1,0 +1,7 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_saas_instance,saas.instance,model_saas_instance,base.group_user,1,1,1,1
+access_saas_based_domain,saas.based.domain,model_saas_based_domain,base.group_user,1,1,1,1
+access_saas_odoo_version,saas.odoo.version,model_saas_odoo_version,base.group_user,1,1,1,1
+access_saas_container_physical_server,saas.container.physical.server,model_saas_container_physical_server,base.group_user,1,1,1,1
+access_saas_psql_physical_server,saas.psql.physical.server,model_saas_psql_physical_server,base.group_user,1,1,1,1
+access_saas_ssh_key_pair,saas.ssh.key.pair,model_saas_ssh_key_pair,base.group_user,1,1,1,1

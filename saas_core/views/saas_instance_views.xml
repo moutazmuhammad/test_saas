@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- List View -->
+    <record id="saas_instance_view_list" model="ir.ui.view">
+        <field name="name">saas.instance.list</field>
+        <field name="model">saas.instance</field>
+        <field name="arch" type="xml">
+            <list string="Odoo Instances"
+                  decoration-success="state == 'deployed'"
+                  decoration-danger="state == 'cancelled'"
+                  decoration-warning="state == 'suspended'"
+                  decoration-muted="state == 'draft'">
+                <field name="subdomain"/>
+                <field name="partner_id"/>
+                <field name="odoo_version_id"/>
+                <field name="container_physical_server_id"/>
+                <field name="psql_physical_server_id"/>
+                <field name="state" widget="badge"
+                       decoration-success="state == 'deployed'"
+                       decoration-danger="state == 'cancelled'"
+                       decoration-warning="state == 'suspended'"
+                       decoration-info="state == 'draft'"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="saas_instance_view_form" model="ir.ui.view">
+        <field name="name">saas.instance.form</field>
+        <field name="model">saas.instance</field>
+        <field name="arch" type="xml">
+            <form string="Odoo Instance">
+                <header>
+                    <!-- Action buttons row 1 (icon-style) -->
+                    <button name="action_restart" string="Restart"
+                            type="object" icon="fa-refresh"/>
+                    <button name="action_stop" string="Stop"
+                            type="object" icon="fa-stop"/>
+                    <button name="action_suspend" string="Suspend"
+                            type="object" icon="fa-pause"
+                            invisible="state != 'deployed'"/>
+                    <button name="action_redeploy" string="Redeploy"
+                            type="object" icon="fa-rocket"/>
+                    <button name="action_config" string="Config"
+                            type="object" icon="fa-cog"/>
+
+                    <!-- Action buttons row 2 -->
+                    <button name="action_create_backup" string="Create Backup"
+                            type="object"/>
+                    <button name="action_update_install_module"
+                            string="Update/Install Module"
+                            type="object"/>
+                    <button name="action_delete_instance" string="Delete"
+                            type="object" class="btn-danger"/>
+
+                    <!-- Statusbar -->
+                    <field name="state" widget="statusbar"
+                           statusbar_visible="draft,deployed,suspended,cancelled"/>
+                </header>
+                <sheet>
+                    <!-- Title: Subdomain . Based Domain -->
+                    <div class="oe_title">
+                        <label for="subdomain" string="Subdomain"/>
+                        <h1>
+                            <field name="subdomain" class="oe_inline"
+                                   placeholder="e.g. test1"/>
+                            <span> . </span>
+                            <field name="based_domain_id" class="oe_inline"
+                                   options="{'no_open': True}"/>
+                        </h1>
+                    </div>
+
+                    <group>
+                        <!-- Left Column -->
+                        <group>
+                            <field name="partner_id"/>
+                            <field name="url" widget="url"/>
+                            <field name="odoo_version_id"/>
+                        </group>
+                        <!-- Right Column -->
+                        <group>
+                            <field name="container_physical_server_id"/>
+                            <field name="psql_physical_server_id"/>
+                            <field name="xmlrpc_port"/>
+                            <field name="longpolling_port"/>
+                            <field name="admin_passwd"/>
+                            <field name="db_user"/>
+                            <field name="db_password"/>
+                        </group>
+                    </group>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+
+    <!-- Action -->
+    <record id="saas_instance_action" model="ir.actions.act_window">
+        <field name="name">Odoo Instances</field>
+        <field name="res_model">saas.instance</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first Odoo instance
+            </p>
+        </field>
+    </record>
+
+</odoo>

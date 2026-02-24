@@ -1,0 +1,26 @@
+{
+    'name': 'SaaS Platform',
+    'version': '18.0.1.0.0',
+    'category': 'SaaS',
+    'summary': 'Platform configuration and instance management for the SaaS platform',
+    'description': 'Centralized SaaS instance management, resource packages, and platform configuration.',
+    'author': 'SaaS Platform',
+    'license': 'LGPL-3',
+    'depends': ['base', 'mail'],
+    'data': [
+        # security rules must load first so that access rights exist when views and menus are evaluated
+        'security/ir.model.access.csv',
+        'data/ir_config_parameter.xml',
+        'views/saas_instance_views.xml',
+        'views/saas_ssh_key_pair_views.xml',
+        'views/saas_container_physical_server_views.xml',
+        'views/saas_psql_physical_server_views.xml',
+        'views/saas_based_domain_views.xml',
+        'views/saas_odoo_version_views.xml',
+        'views/res_config_settings_views.xml',
+        'views/saas_master_menu.xml',
+    ],
+    'installable': True,
+    'application': True,
+    'auto_install': False,
+}
