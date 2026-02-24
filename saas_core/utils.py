@@ -52,14 +52,7 @@ class SSHConnection:
             os.close(fd)
         os.chmod(self._key_tmpfile, stat.S_IRUSR)
 
-        key_class_map = {
-            'rsa': paramiko.RSAKey,
-            'dsa': paramiko.DSSKey,
-            'ecdsa': paramiko.ECDSAKey,
-            'ed25519': paramiko.Ed25519Key,
-        }
-        key_class = key_class_map.get(self.key_type, paramiko.RSAKey)
-        pkey = key_class.from_private_key_file(self._key_tmpfile)
+        pkey = self._load_private_key(self._key_tmpfile)
 
         self._client = paramiko.SSHClient()
         self._client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -71,6 +64,32 @@ class SSHConnection:
             timeout=SSH_CONNECT_TIMEOUT,
             look_for_keys=False,
             allow_agent=False,
+        )
+
+    def _load_private_key(self, path):
+        """Load a private key file, trying the configured type first then auto-detecting."""
+        key_classes = [
+            ('rsa', paramiko.RSAKey),
+            ('ed25519', paramiko.Ed25519Key),
+            ('ecdsa', paramiko.ECDSAKey),
+        ]
+        if hasattr(paramiko, 'DSSKey'):
+            key_classes.append(('dsa', paramiko.DSSKey))
+
+        # Try the hinted key type first
+        ordered = sorted(key_classes, key=lambda kv: kv[0] != self.key_type)
+
+        errors = []
+        for name, cls in ordered:
+            try:
+                return cls.from_private_key_file(path)
+            except Exception as exc:
+                errors.append((name, exc))
+
+        error_details = '; '.join('%s: %s' % (n, e) for n, e in errors)
+        raise paramiko.SSHException(
+            "Unable to load private key (tried %s). Details: %s"
+            % (', '.join(n for n, _ in errors), error_details)
         )
 
     def _disconnect(self):
@@ -88,7 +107,7 @@ class SSHConnection:
                 pass
             self._key_tmpfile = None
 
-    def execute(self, command):
+    def execute(self, command, timeout=None):
         """Execute a command over SSH.
 
         Returns:
@@ -96,7 +115,7 @@ class SSHConnection:
         """
         _logger.info("SSH [%s@%s:%s] executing command", self.user, self.host, self.port)
         stdin, stdout, stderr = self._client.exec_command(
-            command, timeout=self.timeout,
+            command, timeout=timeout or self.timeout,
         )
         exit_code = stdout.channel.recv_exit_status()
         stdout_str = stdout.read().decode('utf-8', errors='replace')

@@ -47,7 +47,8 @@
                     <!-- Stop: only when running -->
                     <button name="action_stop" string="Stop"
                             type="object" icon="fa-stop"
-                            invisible="state != 'running'"/>
+                            invisible="state != 'running'"
+                            confirm="Are you sure you want to stop this instance?"/>
 
                     <!-- Suspend: only when running -->
                     <button name="action_suspend" string="Suspend"
@@ -57,7 +58,8 @@
                     <!-- Redeploy: when running or failed -->
                     <button name="action_redeploy" string="Redeploy"
                             type="object" icon="fa-rocket"
-                            invisible="state not in ('running', 'failed')"/>
+                            invisible="state not in ('running', 'failed')"
+                            confirm="This will tear down and recreate the container. Are you sure?"/>
 
                     <!-- Config: when running -->
                     <button name="action_config" string="Config"
@@ -78,7 +80,8 @@
                     <!-- Delete: when running, failed, or suspended -->
                     <button name="action_delete_instance" string="Delete"
                             type="object" class="btn-danger"
-                            invisible="state not in ('running', 'failed', 'suspended')"/>
+                            invisible="state not in ('running', 'failed', 'suspended')"
+                            confirm="This will permanently delete the container and all its data. Are you sure?"/>
 
                     <!-- Reset to Draft: from failed or cancelled -->
                     <button name="action_draft" string="Reset to Draft"

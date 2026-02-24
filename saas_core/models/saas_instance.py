@@ -136,6 +136,22 @@ class SaasInstance(models.Model):
         ),
     ]
 
+    # ========== CRUD Overrides ==========
+
+    @api.model_create_multi
+    def create(self, vals_list):
+        records = super().create(vals_list)
+        for rec in records:
+            if not rec.db_user and rec.subdomain:
+                rec.db_user = rec._generate_db_user()
+            if not rec.db_password:
+                rec.db_password = rec._generate_random_password()
+            if not rec.admin_passwd:
+                rec.admin_passwd = rec._generate_random_password()
+            if rec.container_physical_server_id and (not rec.xmlrpc_port or not rec.longpolling_port):
+                rec._auto_assign_ports()
+        return records
+
     # ========== Computed ==========
     @api.depends('subdomain', 'based_domain_id.name')
     def _compute_name(self):
@@ -157,7 +173,7 @@ class SaasInstance(models.Model):
 
     def _generate_random_password(self, length=24):
         """Generate a cryptographically secure random password."""
-        alphabet = string.ascii_letters + string.digits + '!@#$%^&*'
+        alphabet = string.ascii_letters + string.digits + '-_.~+='
         return ''.join(secrets.choice(alphabet) for _ in range(length))
 
     def _generate_db_user(self):
@@ -167,11 +183,14 @@ class SaasInstance(models.Model):
         return 'saas_%s' % safe_subdomain
 
     def _get_partner_code(self):
-        """Return partner code for folder naming."""
+        """Return partner code for folder naming: partnercode_partnername."""
         self.ensure_one()
-        if self.partner_id.ref:
-            return self.partner_id.ref
-        return str(self.partner_id.id)
+        code = self.partner_id.ref or str(self.partner_id.id)
+        name = self.partner_id.name or ''
+        # Sanitize name for use as directory: lowercase, replace spaces/special chars
+        safe_name = name.strip().lower().replace(' ', '_')
+        safe_name = ''.join(c for c in safe_name if c.isalnum() or c == '_')
+        return '%s_%s' % (code, safe_name)
 
     def _get_instance_path(self):
         """Return the full remote path for this instance."""
@@ -215,6 +234,68 @@ class SaasInstance(models.Model):
                     key, _, value = line.partition('=')
                     result[key.strip()] = value.strip()
         return result or None
+
+    def _provision_postgresql(self):
+        """Create the PostgreSQL role and database on the PSQL server via SSH."""
+        self.ensure_one()
+        psql_server = self.psql_physical_server_id
+        if not psql_server:
+            raise UserError(_("No PSQL physical server configured on this instance."))
+
+        db_user = self.db_user
+        db_password = self.db_password
+        db_name = self.subdomain
+
+        # Escape single quotes for SQL string literals
+        sql_password = db_password.replace("'", "''")
+
+        # Build a single SQL script and pipe it via heredoc to avoid
+        # all shell escaping issues with passwords.
+        sql_script = (
+            "DO $body$\n"
+            "BEGIN\n"
+            "  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '%(user)s') THEN\n"
+            "    CREATE ROLE %(user)s WITH LOGIN PASSWORD '%(password)s';\n"
+            "  ELSE\n"
+            "    ALTER ROLE %(user)s WITH LOGIN PASSWORD '%(password)s';\n"
+            "  END IF;\n"
+            "END $body$;\n"
+        ) % {'user': db_user, 'password': sql_password}
+
+        # Use a heredoc with a quoted delimiter to prevent any shell expansion
+        ensure_role_cmd = "sudo -u postgres psql <<'SAAS_END_SQL'\n%s\nSAAS_END_SQL" % sql_script
+
+        create_db_cmd = (
+            "sudo -u postgres psql -tc "
+            "\"SELECT 1 FROM pg_database WHERE datname='%(db)s'\" "
+            "| grep -q 1 "
+            "|| sudo -u postgres createdb -O %(user)s %(db)s"
+        ) % {'db': db_name, 'user': db_user}
+
+        with psql_server._get_ssh_connection() as ssh:
+            self._append_log("Ensuring PostgreSQL role '%s'..." % db_user)
+            exit_code, stdout, stderr = ssh.execute(ensure_role_cmd)
+            self._append_log(
+                "Role command result: exit=%s stdout=%s stderr=%s"
+                % (exit_code, stdout.strip(), stderr.strip())
+            )
+            if exit_code != 0:
+                raise UserError(
+                    _("Failed to create/update PostgreSQL role '%s':\n%s")
+                    % (db_user, stderr)
+                )
+
+            self._append_log("Ensuring database '%s'..." % db_name)
+            exit_code, stdout, stderr = ssh.execute(create_db_cmd)
+            self._append_log(
+                "DB command result: exit=%s stdout=%s stderr=%s"
+                % (exit_code, stdout.strip(), stderr.strip())
+            )
+            if exit_code != 0:
+                raise UserError(
+                    _("Failed to create database '%s':\n%s")
+                    % (db_name, stderr)
+                )
 
     def _ensure_can_ssh(self):
         """Validate that the instance has the necessary server config for SSH."""
@@ -299,6 +380,11 @@ class SaasInstance(models.Model):
             errors.append(_("Container server SSH key pair with private key is required."))
         if server and not server.ip_v4:
             errors.append(_("Container server IP address is required."))
+        psql = self.psql_physical_server_id
+        if psql and (not psql.ssh_key_pair_id or not psql.ssh_key_pair_id.private_key_file):
+            errors.append(_("PSQL server SSH key pair with private key is required."))
+        if psql and not psql.ip_v4:
+            errors.append(_("PSQL server IP address is required."))
         if errors:
             raise ValidationError('\n'.join(str(e) for e in errors))
 
@@ -404,55 +490,28 @@ class SaasInstance(models.Model):
                 )
                 self._append_log("odoo.conf written.")
 
-                # Step 9: docker compose up -d
-                self._append_log("Starting container with docker compose up -d...")
-                up_cmd = 'cd %s && docker compose up -d' % instance_path
-                exit_code, stdout, stderr = ssh.execute(up_cmd)
-                self._append_log("docker compose up output:\n%s" % stdout)
-                if exit_code != 0:
-                    raise UserError(
-                        _("docker compose up failed:\n%s\n%s") % (stdout, stderr)
-                    )
-                self._append_log("Container started.")
+                # Step 8b: Create PostgreSQL user and database on PSQL server
+                self._append_log("Creating PostgreSQL role and database...")
+                self._provision_postgresql()
+                self._append_log("PostgreSQL role and database ready.")
 
-                # Step 10: Wait for container to be ready
-                self._append_log("Waiting for container to be ready...")
-                wait_cmd = (
-                    'for i in $(seq 1 30); do '
-                    '  STATUS=$(docker inspect -f "{{{{.State.Status}}}}" %s 2>/dev/null); '
-                    '  if [ "$STATUS" = "running" ]; then echo "READY"; exit 0; fi; '
-                    '  sleep 2; '
-                    'done; '
-                    'echo "TIMEOUT"; exit 1'
-                ) % container_name
-                exit_code, stdout, stderr = ssh.execute(wait_cmd)
-                if exit_code != 0 or 'READY' not in stdout:
-                    raise UserError(
-                        _("Container did not become ready within 60 seconds.\n%s")
-                        % stderr
-                    )
-                self._append_log("Container is running.")
-
-                # Step 11: Initialize Odoo database
+                # Step 9: Initialize Odoo database (before starting server)
                 self._append_log("Initializing Odoo database...")
                 init_cmd = (
-                    'cd %(path)s && docker compose exec -T odoo '
+                    'cd %(path)s && docker compose run --rm -T odoo '
                     'odoo -d %(db_name)s '
-                    '--db_user=%(db_user)s '
-                    '--db_password=%(db_password)s '
-                    '--init=base,sale,crm '
+                    '-i base '
                     '--without-demo=all '
                     '--stop-after-init '
-                    '--no-http'
+                    '--no-http 2>&1'
                 ) % {
                     'path': instance_path,
                     'db_name': self.subdomain,
-                    'db_user': self.db_user,
-                    'db_password': self.db_password,
                 }
-                exit_code, stdout, stderr = ssh.execute(init_cmd)
+                exit_code, stdout, stderr = ssh.execute(init_cmd, timeout=600)
                 self._append_log(
-                    "DB init output (last 500 chars):\n%s" % stdout[-500:]
+                    "DB init output (last 1000 chars):\n%s"
+                    % stdout[-1000:]
                 )
                 if exit_code != 0:
                     raise UserError(
@@ -461,16 +520,48 @@ class SaasInstance(models.Model):
                     )
                 self._append_log("Database initialized successfully.")
 
-                # Step 12: Restart container (it stopped after --stop-after-init)
-                self._append_log("Restarting container after DB init...")
-                exit_code, stdout, stderr = ssh.execute(
-                    'docker restart %s' % container_name,
+                # Step 10: Start the server
+                self._append_log("Starting container with docker compose up -d...")
+                up_cmd = 'cd %s && docker compose up -d 2>&1' % instance_path
+                exit_code, stdout, stderr = ssh.execute(up_cmd)
+                self._append_log(
+                    "docker compose up output:\n%s\n%s" % (stdout, stderr)
                 )
                 if exit_code != 0:
                     raise UserError(
-                        _("Container restart after init failed:\n%s") % stderr
+                        _("docker compose up failed:\n%s\n%s") % (stdout, stderr)
                     )
-                self._append_log("Container restarted successfully.")
+                self._append_log("Container started.")
+
+                # Step 11: Wait for container to be ready
+                self._append_log("Waiting for container to be ready...")
+                wait_cmd = (
+                    'for i in $(seq 1 30); do '
+                    '  STATUS=$(docker inspect -f "{{.State.Status}}" %s 2>/dev/null); '
+                    '  if [ "$STATUS" = "running" ]; then echo "READY"; exit 0; fi; '
+                    '  if [ "$STATUS" = "exited" ] || [ "$STATUS" = "dead" ]; then '
+                    '    echo "FAILED:$STATUS"; exit 1; '
+                    '  fi; '
+                    '  sleep 2; '
+                    'done; '
+                    'echo "TIMEOUT"; exit 1'
+                ) % container_name
+                exit_code, stdout, stderr = ssh.execute(wait_cmd)
+                if exit_code != 0 or 'READY' not in stdout:
+                    _ec, logs_out, _err = ssh.execute(
+                        'docker logs --tail 50 %s 2>&1' % container_name
+                    )
+                    self._append_log(
+                        "Container failed to start.\n"
+                        "Container logs:\n%s"
+                        % logs_out
+                    )
+                    raise UserError(
+                        _("Container did not become ready within 60 seconds.\n"
+                          "Container logs:\n%s")
+                        % logs_out
+                    )
+                self._append_log("Container is running.")
 
             # Success
             self.state = 'running'
