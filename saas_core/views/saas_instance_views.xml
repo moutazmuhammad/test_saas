@@ -7,20 +7,21 @@
         <field name="model">saas.instance</field>
         <field name="arch" type="xml">
             <list string="Odoo Instances"
-                  decoration-success="state == 'deployed'"
-                  decoration-danger="state == 'cancelled'"
+                  decoration-success="state == 'running'"
+                  decoration-danger="state in ('cancelled', 'failed')"
                   decoration-warning="state == 'suspended'"
-                  decoration-muted="state == 'draft'">
+                  decoration-muted="state == 'draft'"
+                  decoration-info="state == 'provisioning'">
                 <field name="subdomain"/>
                 <field name="partner_id"/>
                 <field name="odoo_version_id"/>
                 <field name="container_physical_server_id"/>
                 <field name="psql_physical_server_id"/>
                 <field name="state" widget="badge"
-                       decoration-success="state == 'deployed'"
-                       decoration-danger="state == 'cancelled'"
+                       decoration-success="state == 'running'"
+                       decoration-danger="state in ('cancelled', 'failed')"
                        decoration-warning="state == 'suspended'"
-                       decoration-info="state == 'draft'"/>
+                       decoration-info="state in ('draft', 'provisioning')"/>
             </list>
         </field>
     </record>
@@ -32,31 +33,61 @@
         <field name="arch" type="xml">
             <form string="Odoo Instance">
                 <header>
-                    <!-- Action buttons row 1 (icon-style) -->
+                    <!-- Deploy: visible in draft and failed -->
+                    <button name="action_deploy" string="Deploy"
+                            type="object" class="btn-primary"
+                            icon="fa-play"
+                            invisible="state not in ('draft', 'failed')"/>
+
+                    <!-- Restart: only when running -->
                     <button name="action_restart" string="Restart"
-                            type="object" icon="fa-refresh"/>
+                            type="object" icon="fa-refresh"
+                            invisible="state != 'running'"/>
+
+                    <!-- Stop: only when running -->
                     <button name="action_stop" string="Stop"
-                            type="object" icon="fa-stop"/>
+                            type="object" icon="fa-stop"
+                            invisible="state != 'running'"/>
+
+                    <!-- Suspend: only when running -->
                     <button name="action_suspend" string="Suspend"
                             type="object" icon="fa-pause"
-                            invisible="state != 'deployed'"/>
-                    <button name="action_redeploy" string="Redeploy"
-                            type="object" icon="fa-rocket"/>
-                    <button name="action_config" string="Config"
-                            type="object" icon="fa-cog"/>
+                            invisible="state != 'running'"/>
 
-                    <!-- Action buttons row 2 -->
+                    <!-- Redeploy: when running or failed -->
+                    <button name="action_redeploy" string="Redeploy"
+                            type="object" icon="fa-rocket"
+                            invisible="state not in ('running', 'failed')"/>
+
+                    <!-- Config: when running -->
+                    <button name="action_config" string="Config"
+                            type="object" icon="fa-cog"
+                            invisible="state != 'running'"/>
+
+                    <!-- Create Backup: when running -->
                     <button name="action_create_backup" string="Create Backup"
-                            type="object"/>
+                            type="object"
+                            invisible="state != 'running'"/>
+
+                    <!-- Update/Install Module: when running -->
                     <button name="action_update_install_module"
                             string="Update/Install Module"
-                            type="object"/>
+                            type="object"
+                            invisible="state != 'running'"/>
+
+                    <!-- Delete: when running, failed, or suspended -->
                     <button name="action_delete_instance" string="Delete"
-                            type="object" class="btn-danger"/>
+                            type="object" class="btn-danger"
+                            invisible="state not in ('running', 'failed', 'suspended')"/>
+
+                    <!-- Reset to Draft: from failed or cancelled -->
+                    <button name="action_draft" string="Reset to Draft"
+                            type="object"
+                            invisible="state not in ('failed', 'cancelled')"/>
 
                     <!-- Statusbar -->
                     <field name="state" widget="statusbar"
-                           statusbar_visible="draft,deployed,suspended,cancelled"/>
+                           statusbar_visible="draft,provisioning,running,suspended,cancelled"/>
                 </header>
                 <sheet>
                     <!-- Title: Subdomain . Based Domain -->
@@ -84,11 +115,23 @@
                             <field name="psql_physical_server_id"/>
                             <field name="xmlrpc_port"/>
                             <field name="longpolling_port"/>
-                            <field name="admin_passwd"/>
+                            <field name="admin_passwd" password="True"/>
                             <field name="db_user"/>
-                            <field name="db_password"/>
+                            <field name="db_password" password="True"/>
                         </group>
                     </group>
+
+                    <notebook>
+                        <page string="Extra Configuration">
+                            <field name="extra_config" nolabel="1"
+                                   placeholder="key = value (one per line)"/>
+                        </page>
+                        <page string="Provisioning Log"
+                              invisible="not provisioning_log">
+                            <field name="provisioning_log" readonly="1"
+                                   nolabel="1"/>
+                        </page>
+                    </notebook>
                 </sheet>
                 <chatter/>
             </form>

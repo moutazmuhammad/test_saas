@@ -7,6 +7,9 @@
     'author': 'SaaS Platform',
     'license': 'LGPL-3',
     'depends': ['base', 'mail'],
+    'external_dependencies': {
+        'python': ['paramiko', 'jinja2'],
+    },
     'data': [
         # security rules must load first so that access rights exist when views and menus are evaluated
         'security/ir.model.access.csv',
