@@ -2,6 +2,10 @@ from . import saas_instance
 from . import res_config_settings
 from . import saas_ssh_key_pair
 from . import saas_container_physical_servers
+from . import saas_docker_container
 from . import saas_psql_physical_servers
 from . import saas_odoo_version
+from . import saas_odoo_module
+from . import saas_odoo_product
+from . import saas_instance_module_line
 from . import saas_domain

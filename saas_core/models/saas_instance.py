@@ -61,32 +61,69 @@ class SaasInstance(models.Model):
         'saas.container.physical.server',
         string='Container Physical Server',
         tracking=True,
+        default=lambda self: self.env['saas.container.physical.server'].search([], limit=1),
     )
 
     psql_physical_server_id = fields.Many2one(
         'saas.psql.physical.server',
         string='Psql Physical Server',
         tracking=True,
+        default=lambda self: self.env['saas.psql.physical.server'].search([], limit=1),
     )
 
     xmlrpc_port = fields.Char(
         string='Xmlrpc Port',
+        readonly=True,
     )
 
     longpolling_port = fields.Char(
         string='Longpolling Port',
+        readonly=True,
     )
 
     admin_passwd = fields.Char(
         string='Admin Password',
+        readonly=True,
     )
 
     db_user = fields.Char(
         string='Conf DB User',
+        readonly=True,
     )
 
     db_password = fields.Char(
         string='Conf DB Password',
+        readonly=True,
+    )
+
+    # ========== Modules ==========
+    instance_module_line_ids = fields.One2many(
+        'saas.instance.module.line',
+        'instance_id',
+        string='All Installation Lines',
+    )
+
+    instance_product_line_ids = fields.One2many(
+        'saas.instance.module.line',
+        'instance_id',
+        string='Products to Install',
+        domain=[('product_id', '!=', False)],
+    )
+
+    instance_single_module_line_ids = fields.One2many(
+        'saas.instance.module.line',
+        'instance_id',
+        string='Modules to Install',
+        domain=[('module_id', '!=', False)],
+    )
+
+    installed_module_ids = fields.Many2many(
+        'saas.odoo.module',
+        'saas_instance_installed_module_rel',
+        'instance_id',
+        'module_id',
+        string='Installed Modules',
+        readonly=True,
     )
 
     # ========== New Fields ==========
@@ -106,6 +143,7 @@ class SaasInstance(models.Model):
             ('draft', 'Draft'),
             ('provisioning', 'Provisioning'),
             ('running', 'Running'),
+            ('stopped', 'Stopped'),
             ('failed', 'Failed'),
             ('suspended', 'Suspended'),
             ('cancelled', 'Cancelled'),
@@ -308,10 +346,7 @@ class SaasInstance(models.Model):
                 _("SSH key pair with private key is required on server '%s'.")
                 % server.name
             )
-        if not server.ip_v4:
-            raise ValidationError(
-                _("IP address is required on server '%s'.") % server.name
-            )
+        server._get_ssh_ip()
 
     def _auto_assign_ports(self):
         """Auto-assign xmlrpc_port and longpolling_port if not already set."""
@@ -378,13 +413,21 @@ class SaasInstance(models.Model):
         server = self.container_physical_server_id
         if server and (not server.ssh_key_pair_id or not server.ssh_key_pair_id.private_key_file):
             errors.append(_("Container server SSH key pair with private key is required."))
-        if server and not server.ip_v4:
-            errors.append(_("Container server IP address is required."))
+        if server:
+            if server.ssh_connect_using == 'private_ip' and not server.private_ip_v4:
+                errors.append(_("Container server Private IP is required (SSH is set to use Private IP)."))
+            elif server.ssh_connect_using == 'public_ip' and not server.ip_v4:
+                errors.append(_("Container server Public IP address is required."))
         psql = self.psql_physical_server_id
         if psql and (not psql.ssh_key_pair_id or not psql.ssh_key_pair_id.private_key_file):
             errors.append(_("PSQL server SSH key pair with private key is required."))
-        if psql and not psql.ip_v4:
-            errors.append(_("PSQL server IP address is required."))
+        if psql:
+            if psql.ssh_connect_using == 'private_ip' and not psql.private_ip_v4:
+                errors.append(_("PSQL server Private IP is required (SSH is set to use Private IP)."))
+            elif psql.ssh_connect_using == 'public_ip' and not psql.ip_v4:
+                errors.append(_("PSQL server Public IP address is required."))
+            if not psql.private_ip_v4 and not psql.ip_v4:
+                errors.append(_("PSQL server needs at least one IP address for db_host configuration."))
         if errors:
             raise ValidationError('\n'.join(str(e) for e in errors))
 
@@ -473,9 +516,11 @@ class SaasInstance(models.Model):
                 # Step 8: Render and write odoo.conf
                 self._append_log("Writing odoo.conf...")
                 psql_server = self.psql_physical_server_id
+                # Always use private IP for DB connection (container and DB are on same network)
+                db_host = psql_server.private_ip_v4 or psql_server.ip_v4
                 conf_context = {
                     'master_pass': self.admin_passwd,
-                    'db_host': psql_server.ip_v4,
+                    'db_host': db_host,
                     'db_port': psql_server.psql_port or 5432,
                     'db_user': self.db_user,
                     'db_password': self.db_password,
@@ -496,17 +541,30 @@ class SaasInstance(models.Model):
                 self._append_log("PostgreSQL role and database ready.")
 
                 # Step 9: Initialize Odoo database (before starting server)
-                self._append_log("Initializing Odoo database...")
+                pending_lines = self.instance_module_line_ids.filtered(
+                    lambda l: l.state == 'pending'
+                )
+                all_module_names = set()
+                for line in pending_lines:
+                    all_module_names |= line._get_all_technical_names()
+                modules_to_install = 'base'
+                if all_module_names:
+                    all_module_names.discard('base')
+                    modules_to_install = 'base,%s' % ','.join(sorted(all_module_names))
+                self._append_log(
+                    "Initializing Odoo database with modules: %s" % modules_to_install
+                )
                 init_cmd = (
                     'cd %(path)s && docker compose run --rm -T odoo '
                     'odoo -d %(db_name)s '
-                    '-i base '
+                    '-i %(modules)s '
                     '--without-demo=all '
                     '--stop-after-init '
                     '--no-http 2>&1'
                 ) % {
                     'path': instance_path,
                     'db_name': self.subdomain,
+                    'modules': modules_to_install,
                 }
                 exit_code, stdout, stderr = ssh.execute(init_cmd, timeout=600)
                 self._append_log(
@@ -519,6 +577,18 @@ class SaasInstance(models.Model):
                         % (stdout[-500:], stderr[-500:])
                     )
                 self._append_log("Database initialized successfully.")
+
+                # Track installed modules
+                if pending_lines:
+                    all_modules = self.env['saas.odoo.module']
+                    for line in pending_lines:
+                        line.state = 'installed'
+                        if line.product_id:
+                            all_modules |= line.product_id.module_ids
+                        elif line.module_id:
+                            all_modules |= line.module_id
+                    if all_modules:
+                        self.installed_module_ids = [(4, m.id) for m in all_modules]
 
                 # Step 10: Start the server
                 self._append_log("Starting container with docker compose up -d...")
@@ -583,7 +653,7 @@ class SaasInstance(models.Model):
     # ========== Lifecycle Actions ==========
 
     def action_stop(self):
-        """Stop the Docker container via SSH."""
+        """Stop the Docker container and set state to stopped."""
         for rec in self:
             rec._ensure_can_ssh()
             server = rec.container_physical_server_id
@@ -597,7 +667,7 @@ class SaasInstance(models.Model):
                         _("Failed to stop container '%s':\n%s")
                         % (container_name, stderr)
                     )
-        return True
+            rec.state = 'stopped'
 
     def action_restart(self):
         """Restart the Docker container via SSH."""
@@ -614,20 +684,21 @@ class SaasInstance(models.Model):
                         _("Failed to restart container '%s':\n%s")
                         % (container_name, stderr)
                     )
-        return True
+            rec.state = 'running'
 
     def action_redeploy(self):
-        """Redeploy: docker compose down + up in the instance folder."""
+        """Redeploy: stop container and start again, keeping volumes."""
         for rec in self:
             rec._ensure_can_ssh()
             server = rec.container_physical_server_id
             instance_path = rec._get_instance_path()
             with server._get_ssh_connection() as ssh:
-                down_cmd = 'cd %s && docker compose down' % instance_path
-                exit_code, stdout, stderr = ssh.execute(down_cmd)
+                # Stop without removing volumes
+                stop_cmd = 'cd %s && docker compose stop' % instance_path
+                exit_code, stdout, stderr = ssh.execute(stop_cmd)
                 if exit_code != 0:
                     raise UserError(
-                        _("docker compose down failed:\n%s") % stderr
+                        _("docker compose stop failed:\n%s") % stderr
                     )
                 up_cmd = 'cd %s && docker compose up -d' % instance_path
                 exit_code, stdout, stderr = ssh.execute(up_cmd)
@@ -635,7 +706,7 @@ class SaasInstance(models.Model):
                     raise UserError(
                         _("docker compose up -d failed:\n%s") % stderr
                     )
-        return True
+            rec.state = 'running'
 
     def action_suspend(self):
         """Stop container and set state to suspended."""
@@ -667,15 +738,50 @@ class SaasInstance(models.Model):
                 )
             rec.state = 'draft'
 
+    def _drop_postgresql(self):
+        """Drop the PostgreSQL database and role on the PSQL server via SSH."""
+        self.ensure_one()
+        psql_server = self.psql_physical_server_id
+        if not psql_server:
+            return
+
+        db_name = self.subdomain
+        db_user = self.db_user
+
+        with psql_server._get_ssh_connection() as ssh:
+            # Drop the database
+            if db_name:
+                drop_db_cmd = (
+                    "sudo -u postgres psql -tc "
+                    "\"SELECT 1 FROM pg_database WHERE datname='%(db)s'\" "
+                    "| grep -q 1 "
+                    "&& sudo -u postgres dropdb %(db)s"
+                ) % {'db': db_name}
+                ssh.execute(drop_db_cmd)
+
+            # Drop the role
+            if db_user:
+                drop_role_cmd = (
+                    "sudo -u postgres psql -tc "
+                    "\"SELECT 1 FROM pg_roles WHERE rolname='%(user)s'\" "
+                    "| grep -q 1 "
+                    "&& sudo -u postgres dropuser %(user)s"
+                ) % {'user': db_user}
+                ssh.execute(drop_role_cmd)
+
     def action_delete_instance(self):
-        """Remove container and delete instance folder."""
+        """Remove container, volumes, network, database, db user, and instance folder."""
         for rec in self:
             rec._ensure_can_ssh()
             server = rec.container_physical_server_id
-            container_name = rec._get_container_name()
             instance_path = rec._get_instance_path()
+
+            # Step 1: Remove container, volumes, and network via docker compose
             with server._get_ssh_connection() as ssh:
-                ssh.execute('docker rm -f %s' % container_name)
+                down_cmd = 'cd %s && docker compose down -v --remove-orphans 2>&1' % instance_path
+                ssh.execute(down_cmd)
+
+                # Step 2: Remove instance directory (configs, data, addons)
                 exit_code, stdout, stderr = ssh.execute(
                     'rm -rf %s' % instance_path,
                 )
@@ -684,6 +790,10 @@ class SaasInstance(models.Model):
                         _("Failed to remove instance directory '%s':\n%s")
                         % (instance_path, stderr)
                     )
+
+            # Step 3: Drop PostgreSQL database and role
+            rec._drop_postgresql()
+
             rec.state = 'cancelled'
         return True
 
@@ -693,8 +803,62 @@ class SaasInstance(models.Model):
     def action_create_backup(self):
         return True
 
-    def action_update_install_module(self):
-        return True
+    def action_install_modules(self):
+        """Install all pending module lines on the running instance."""
+        self.ensure_one()
+        self._ensure_can_ssh()
+        server = self.container_physical_server_id
+        container_name = self._get_container_name()
+
+        pending_lines = self.instance_module_line_ids.filtered(
+            lambda l: l.state == 'pending'
+        )
+        if not pending_lines:
+            raise UserError(_("No pending modules to install."))
+
+        for line in pending_lines:
+            module_names = line._get_all_technical_names()
+            if not module_names:
+                line.state = 'failed'
+                line.log = 'No modules found for this line.'
+                continue
+
+            names_str = ','.join(sorted(module_names))
+            self._append_log("Installing modules: %s" % names_str)
+
+            install_cmd = (
+                'docker exec %(container)s '
+                'odoo -d %(db_name)s '
+                '-i %(modules)s '
+                '--stop-after-init '
+                '--no-http 2>&1'
+            ) % {
+                'container': container_name,
+                'db_name': self.subdomain,
+                'modules': names_str,
+            }
+
+            with server._get_ssh_connection() as ssh:
+                exit_code, stdout, stderr = ssh.execute(install_cmd, timeout=600)
+
+            if exit_code != 0:
+                line.state = 'failed'
+                line.log = stdout[-1000:] + '\n' + stderr[-500:]
+                self._append_log(
+                    "FAILED installing modules: %s\n%s" % (names_str, line.log)
+                )
+            else:
+                line.state = 'installed'
+                line.log = ''
+                self._append_log("Modules installed successfully: %s" % names_str)
+                # Track installed modules
+                all_modules = self.env['saas.odoo.module']
+                if line.product_id:
+                    all_modules |= line.product_id.module_ids
+                elif line.module_id:
+                    all_modules |= line.module_id
+                if all_modules:
+                    self.installed_module_ids = [(4, m.id) for m in all_modules]
 
     def action_get_users(self):
         return True

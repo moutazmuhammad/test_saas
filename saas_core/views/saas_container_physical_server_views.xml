@@ -12,6 +12,10 @@
                             string="Test Connection"
                             type="object"
                             class="oe_highlight"/>
+                    <button name="action_refresh_containers"
+                            string="Refresh Containers"
+                            type="object"
+                            icon="fa-refresh"/>
                 </header>
                 <sheet>
                     <div class="oe_title">
@@ -21,14 +25,23 @@
                         </h1>
                     </div>
                     <group>
-                        <group>
+                        <group string="SSH Configuration">
                             <field name="ssh_key_pair_id"/>
                             <field name="ssh_user"/>
                             <field name="ssh_port"/>
+                            <field name="ssh_connect_using"/>
+                        </group>
+                        <group string="Network">
                             <field name="ip_v4"/>
+                            <field name="private_ip_v4"/>
                             <field name="docker_base_path"/>
                         </group>
                     </group>
+                    <notebook>
+                        <page string="Docker Containers">
+                            <field name="docker_container_ids" nolabel="1"/>
+                        </page>
+                    </notebook>
                 </sheet>
             </form>
         </field>
@@ -40,10 +53,13 @@
         <field name="model">saas.container.physical.server</field>
         <field name="arch" type="xml">
             <list string="Container Physical Servers">
+                <field name="sequence" widget="handle"/>
                 <field name="name"/>
                 <field name="ssh_key_pair_id"/>
                 <field name="ssh_port"/>
                 <field name="ip_v4"/>
+                <field name="private_ip_v4"/>
+                <field name="ssh_connect_using"/>
             </list>
         </field>
     </record>

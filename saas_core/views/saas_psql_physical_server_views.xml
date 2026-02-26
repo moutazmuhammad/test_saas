@@ -21,11 +21,15 @@
                         </h1>
                     </div>
                     <group>
-                        <group>
+                        <group string="SSH Configuration">
                             <field name="ssh_key_pair_id"/>
                             <field name="ssh_user"/>
                             <field name="ssh_port"/>
+                            <field name="ssh_connect_using"/>
+                        </group>
+                        <group string="Network">
                             <field name="ip_v4"/>
+                            <field name="private_ip_v4"/>
                             <field name="psql_port"/>
                         </group>
                     </group>
@@ -40,10 +44,13 @@
         <field name="model">saas.psql.physical.server</field>
         <field name="arch" type="xml">
             <list string="Psql Physical Servers">
+                <field name="sequence" widget="handle"/>
                 <field name="name"/>
                 <field name="ssh_key_pair_id"/>
                 <field name="ssh_port"/>
                 <field name="ip_v4"/>
+                <field name="private_ip_v4"/>
+                <field name="ssh_connect_using"/>
             </list>
         </field>
     </record>

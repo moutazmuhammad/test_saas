@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Search View -->
+    <record id="saas_odoo_module_view_search" model="ir.ui.view">
+        <field name="name">saas.odoo.module.search</field>
+        <field name="model">saas.odoo.module</field>
+        <field name="arch" type="xml">
+            <search string="Odoo Modules">
+                <field name="name"/>
+                <field name="technical_name"/>
+                <field name="category"/>
+                <field name="author"/>
+                <field name="odoo_version_id"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_category" string="Category"
+                            context="{'group_by': 'category'}"/>
+                    <filter name="group_by_author" string="Author"
+                            context="{'group_by': 'author'}"/>
+                    <filter name="group_by_version" string="Version"
+                            context="{'group_by': 'odoo_version_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Kanban View -->
+    <record id="saas_odoo_module_view_kanban" model="ir.ui.view">
+        <field name="name">saas.odoo.module.kanban</field>
+        <field name="model">saas.odoo.module</field>
+        <field name="arch" type="xml">
+            <kanban>
+                <field name="id"/>
+                <field name="name"/>
+                <field name="technical_name"/>
+                <field name="summary"/>
+                <field name="category"/>
+                <field name="image_128"/>
+                <templates>
+                    <t t-name="card" class="flex-row">
+                        <aside>
+                            <field name="image_128" widget="image"/>
+                        </aside>
+                        <main>
+                            <field name="name" class="fw-bold fs-5"/>
+                            <span class="text-muted"><field name="technical_name"/></span>
+                            <field name="summary" class="text-muted"/>
+                            <footer>
+                                <field name="category" class="badge text-bg-info"
+                                       invisible="not category"/>
+                            </footer>
+                        </main>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- Form View -->
+    <record id="saas_odoo_module_view_form" model="ir.ui.view">
+        <field name="name">saas.odoo.module.form</field>
+        <field name="model">saas.odoo.module</field>
+        <field name="arch" type="xml">
+            <form string="Odoo Module">
+                <sheet>
+                    <field name="image_1920" widget="image" class="oe_avatar"
+                           options="{'preview_image': 'image_128'}"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="Module Name"/></h1>
+                        <field name="technical_name" class="text-muted"/>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="odoo_version_id"/>
+                            <field name="category"/>
+                            <field name="author"/>
+                        </group>
+                        <group>
+                            <field name="summary"/>
+                            <field name="dependency_ids" widget="many2many_tags"
+                                   domain="[('odoo_version_id', '=', odoo_version_id)]"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Description"
+                              invisible="not description">
+                            <field name="description" nolabel="1"/>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- List View -->
+    <record id="saas_odoo_module_view_list" model="ir.ui.view">
+        <field name="name">saas.odoo.module.list</field>
+        <field name="model">saas.odoo.module</field>
+        <field name="arch" type="xml">
+            <list string="Odoo Modules">
+                <field name="image_128" widget="image"
+                       options="{'size': [32, 32]}" string=""/>
+                <field name="name"/>
+                <field name="technical_name"/>
+                <field name="category" optional="show"/>
+                <field name="summary" optional="hide"/>
+                <field name="author" optional="hide"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Action -->
+    <record id="saas_odoo_module_action" model="ir.actions.act_window">
+        <field name="name">Odoo Modules</field>
+        <field name="res_model">saas.odoo.module</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="search_view_id" ref="saas_odoo_module_view_search"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Add your first Odoo module
+            </p>
+        </field>
+    </record>
+
+</odoo>

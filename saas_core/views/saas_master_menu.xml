@@ -57,6 +57,19 @@
               action="saas_odoo_version_action"
               sequence="28"/>
 
+    <!-- Configuration > Odoo Modules -->
+    <menuitem id="saas_master_menu_odoo_modules"
+              name="Odoo Modules"
+              parent="saas_master_menu_configuration"
+              action="saas_odoo_module_action"
+              sequence="30"/>
+
+    <!-- Configuration > Module Products -->
+    <menuitem id="saas_master_menu_odoo_products"
+              name="Module Products"
+              parent="saas_master_menu_configuration"
+              action="saas_odoo_product_action"
+              sequence="32"/>
 
 </odoo>
 
