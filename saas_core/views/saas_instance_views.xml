@@ -6,7 +6,7 @@
         <field name="name">saas.instance.list</field>
         <field name="model">saas.instance</field>
         <field name="arch" type="xml">
-            <list string="Odoo Instances"
+            <list string="SaaS Instances"
                   decoration-success="state == 'running'"
                   decoration-danger="state in ('cancelled', 'failed')"
                   decoration-warning="state == 'suspended'"
@@ -15,8 +15,8 @@
                 <field name="subdomain"/>
                 <field name="partner_id"/>
                 <field name="odoo_version_id"/>
-                <field name="container_physical_server_id"/>
-                <field name="psql_physical_server_id"/>
+                <field name="docker_server_id"/>
+                <field name="db_server_id"/>
                 <field name="state" widget="badge"
                        decoration-success="state == 'running'"
                        decoration-danger="state in ('cancelled', 'failed')"
@@ -32,7 +32,7 @@
         <field name="name">saas.instance.form</field>
         <field name="model">saas.instance</field>
         <field name="arch" type="xml">
-            <form string="Odoo Instance">
+            <form string="SaaS Instance">
                 <header>
                     <!-- Deploy: visible in draft and failed -->
                     <button name="action_deploy" string="Deploy"
@@ -95,14 +95,14 @@
                            statusbar_visible="draft,provisioning,running,stopped,suspended,cancelled"/>
                 </header>
                 <sheet>
-                    <!-- Title: Subdomain . Based Domain -->
+                    <!-- Title: Subdomain . Base Domain -->
                     <div class="oe_title">
                         <label for="subdomain" string="Subdomain"/>
                         <h1>
                             <field name="subdomain" class="oe_inline"
                                    placeholder="e.g. test1"/>
                             <span> . </span>
-                            <field name="based_domain_id" class="oe_inline"
+                            <field name="domain_id" class="oe_inline"
                                    options="{'no_open': True}"/>
                         </h1>
                     </div>
@@ -116,26 +116,26 @@
                         </group>
                         <!-- Right Column -->
                         <group>
-                            <field name="container_physical_server_id"/>
-                            <field name="psql_physical_server_id"/>
+                            <field name="docker_server_id"/>
+                            <field name="db_server_id"/>
                             <field name="xmlrpc_port"/>
                             <field name="longpolling_port"/>
-                            <field name="admin_passwd" password="True"/>
+                            <field name="admin_password" password="True"/>
                             <field name="db_user"/>
                             <field name="db_password" password="True"/>
                         </group>
                     </group>
 
                     <notebook>
-                        <page string="Products">
-                            <field name="instance_product_line_ids" nolabel="1">
+                        <page string="Bundles">
+                            <field name="bundle_line_ids" nolabel="1">
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
                                     <field name="odoo_version_id" column_invisible="1"/>
                                     <field name="product_id"
                                            required="1"
                                            options="{'no_create': True}"
-                                           domain="[('odoo_version_id', '=', odoo_version_id)]"/>
+                                           domain="[('saas_type', '=', 'bundle'), ('saas_odoo_version_id', '=', odoo_version_id)]"/>
                                     <field name="state" widget="badge"
                                            decoration-success="state == 'installed'"
                                            decoration-danger="state == 'failed'"
@@ -145,7 +145,7 @@
                             </field>
                         </page>
                         <page string="Modules">
-                            <field name="instance_single_module_line_ids" nolabel="1">
+                            <field name="single_module_line_ids" nolabel="1">
                                 <list editable="bottom">
                                     <field name="sequence" widget="handle"/>
                                     <field name="odoo_version_id" column_invisible="1"/>
@@ -154,7 +154,7 @@
                                     <field name="module_id"
                                            required="1"
                                            options="{'no_create': True}"
-                                           domain="[('odoo_version_id', '=', odoo_version_id)]"/>
+                                           domain="[('saas_type', '=', 'module'), ('saas_odoo_version_id', '=', odoo_version_id)]"/>
                                     <field name="state" widget="badge"
                                            decoration-success="state == 'installed'"
                                            decoration-danger="state == 'failed'"
@@ -171,7 +171,6 @@
                                            options="{'size': [32, 32]}" string=""/>
                                     <field name="name"/>
                                     <field name="technical_name"/>
-                                    <field name="category" optional="show"/>
                                 </list>
                             </field>
                         </page>
@@ -194,12 +193,12 @@
 
     <!-- Action -->
     <record id="saas_instance_action" model="ir.actions.act_window">
-        <field name="name">Odoo Instances</field>
+        <field name="name">SaaS Instances</field>
         <field name="res_model">saas.instance</field>
         <field name="view_mode">list,form</field>
         <field name="help" type="html">
             <p class="o_view_nocontent_smiling_face">
-                Create your first Odoo instance
+                Create your first SaaS instance
             </p>
         </field>
     </record>

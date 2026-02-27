@@ -19,122 +19,134 @@ TEMPLATES_PATH = os.path.join(
 
 class SaasInstance(models.Model):
     _name = 'saas.instance'
-    _description = 'Odoo Instance'
+    _description = 'SaaS Instance'
     _inherit = ['mail.thread', 'mail.activity.mixin']
     _order = 'create_date desc'
 
-    # ========== Title ==========
+    # ========== Identity ==========
     subdomain = fields.Char(
         string='Subdomain',
         required=True,
         tracking=True,
+        help='Unique subdomain prefix for this instance (e.g. "acme"). '
+             'Combined with the base domain to form the full URL.',
     )
-    based_domain_id = fields.Many2one(
+    domain_id = fields.Many2one(
         'saas.based.domain',
-        string='Based Domain',
+        string='Base Domain',
+        help='The parent domain under which this instance is hosted '
+             '(e.g. "odoo.example.com").',
     )
-
     name = fields.Char(
         string='Instance Name',
         compute='_compute_name',
         store=True,
+        help='Full hostname of the instance, computed from subdomain and base domain.',
     )
-
     partner_id = fields.Many2one(
         'res.partner',
         string='Customer',
         tracking=True,
+        help='The customer who owns this Odoo instance.',
     )
     url = fields.Char(
         string='URL',
         compute='_compute_url',
         store=True,
+        help='Public HTTPS URL to access this instance.',
     )
 
+    # ========== Infrastructure ==========
     odoo_version_id = fields.Many2one(
         'saas.odoo.version',
         string='Odoo Version',
         tracking=True,
+        help='Odoo version and Docker image used by this instance.',
     )
-
-    container_physical_server_id = fields.Many2one(
+    docker_server_id = fields.Many2one(
         'saas.container.physical.server',
-        string='Container Physical Server',
+        string='Docker Server',
         tracking=True,
         default=lambda self: self.env['saas.container.physical.server'].search([], limit=1),
+        help='Physical server where the Docker container for this instance runs.',
     )
-
-    psql_physical_server_id = fields.Many2one(
+    db_server_id = fields.Many2one(
         'saas.psql.physical.server',
-        string='Psql Physical Server',
+        string='Database Server',
         tracking=True,
         default=lambda self: self.env['saas.psql.physical.server'].search([], limit=1),
+        help='PostgreSQL server that hosts the database for this instance.',
     )
-
     xmlrpc_port = fields.Char(
-        string='Xmlrpc Port',
+        string='HTTP Port',
         readonly=True,
+        help='Host port mapped to the Odoo XML-RPC / HTTP interface inside the container.',
     )
-
     longpolling_port = fields.Char(
         string='Longpolling Port',
         readonly=True,
+        help='Host port mapped to the Odoo longpolling / websocket interface inside the container.',
     )
 
-    admin_passwd = fields.Char(
-        string='Admin Password',
+    # ========== Credentials ==========
+    admin_password = fields.Char(
+        string='Admin Master Password',
         readonly=True,
+        help='Odoo master password (admin_passwd in odoo.conf). '
+             'Used for database management operations.',
     )
-
     db_user = fields.Char(
-        string='Conf DB User',
+        string='Database User',
         readonly=True,
+        help='PostgreSQL role name created for this instance.',
     )
-
     db_password = fields.Char(
-        string='Conf DB Password',
+        string='Database Password',
         readonly=True,
+        help='Password for the PostgreSQL role used by this instance.',
     )
 
     # ========== Modules ==========
-    instance_module_line_ids = fields.One2many(
+    module_line_ids = fields.One2many(
         'saas.instance.module.line',
         'instance_id',
-        string='All Installation Lines',
+        string='Installation Lines',
+        help='All module and bundle installation requests for this instance.',
     )
-
-    instance_product_line_ids = fields.One2many(
+    bundle_line_ids = fields.One2many(
         'saas.instance.module.line',
         'instance_id',
-        string='Products to Install',
+        string='Bundles to Install',
         domain=[('product_id', '!=', False)],
+        help='Installation lines that reference a module bundle.',
     )
-
-    instance_single_module_line_ids = fields.One2many(
+    single_module_line_ids = fields.One2many(
         'saas.instance.module.line',
         'instance_id',
         string='Modules to Install',
         domain=[('module_id', '!=', False)],
+        help='Installation lines that reference an individual module.',
     )
-
     installed_module_ids = fields.Many2many(
-        'saas.odoo.module',
-        'saas_instance_installed_module_rel',
+        'product.product',
+        'saas_instance_installed_product_rel',
         'instance_id',
-        'module_id',
+        'product_id',
         string='Installed Modules',
         readonly=True,
+        help='Module products that have been successfully installed on this instance.',
     )
 
-    # ========== New Fields ==========
+    # ========== Operations ==========
     provisioning_log = fields.Text(
         string='Provisioning Log',
         readonly=True,
+        help='Timestamped log of all provisioning and deployment steps.',
     )
-
     extra_config = fields.Text(
         string='Extra Configuration',
-        help='Additional odoo.conf key=value pairs, one per line.',
+        help='Additional odoo.conf directives, one key = value pair per line. '
+             'Lines starting with # are ignored.',
     )
 
     # ========== State ==========
@@ -153,24 +165,26 @@ class SaasInstance(models.Model):
         tracking=True,
         required=True,
         index=True,
+        help='Current lifecycle state of the instance.',
     )
     company_id = fields.Many2one(
         'res.company',
         string='Company',
         default=lambda self: self.env.company,
+        help='Company that manages this SaaS instance.',
     )
 
     # ========== Constraints ==========
     _sql_constraints = [
         (
             'unique_xmlrpc_port_per_server',
-            'UNIQUE(container_physical_server_id, xmlrpc_port)',
-            'XML-RPC port must be unique per container server.',
+            'UNIQUE(docker_server_id, xmlrpc_port)',
+            'HTTP port must be unique per Docker server.',
         ),
         (
             'unique_longpolling_port_per_server',
-            'UNIQUE(container_physical_server_id, longpolling_port)',
-            'Longpolling port must be unique per container server.',
+            'UNIQUE(docker_server_id, longpolling_port)',
+            'Longpolling port must be unique per Docker server.',
         ),
     ]
 
@@ -184,26 +198,26 @@ class SaasInstance(models.Model):
                 rec.db_user = rec._generate_db_user()
             if not rec.db_password:
                 rec.db_password = rec._generate_random_password()
-            if not rec.admin_passwd:
-                rec.admin_passwd = rec._generate_random_password()
-            if rec.container_physical_server_id and (not rec.xmlrpc_port or not rec.longpolling_port):
+            if not rec.admin_password:
+                rec.admin_password = rec._generate_random_password()
+            if rec.docker_server_id and (not rec.xmlrpc_port or not rec.longpolling_port):
                 rec._auto_assign_ports()
         return records
 
     # ========== Computed ==========
-    @api.depends('subdomain', 'based_domain_id.name')
+    @api.depends('subdomain', 'domain_id.name')
     def _compute_name(self):
         for rec in self:
-            if rec.subdomain and rec.based_domain_id:
-                rec.name = '%s.%s' % (rec.subdomain, rec.based_domain_id.name)
+            if rec.subdomain and rec.domain_id:
+                rec.name = '%s.%s' % (rec.subdomain, rec.domain_id.name)
             else:
                 rec.name = rec.subdomain or ''
 
-    @api.depends('subdomain', 'based_domain_id.name')
+    @api.depends('subdomain', 'domain_id.name')
     def _compute_url(self):
         for rec in self:
-            if rec.subdomain and rec.based_domain_id:
-                rec.url = 'https://%s.%s' % (rec.subdomain, rec.based_domain_id.name)
+            if rec.subdomain and rec.domain_id:
+                rec.url = 'https://%s.%s' % (rec.subdomain, rec.domain_id.name)
             else:
                 rec.url = ''
 
@@ -225,7 +239,6 @@ class SaasInstance(models.Model):
         self.ensure_one()
         code = self.partner_id.ref or str(self.partner_id.id)
         name = self.partner_id.name or ''
-        # Sanitize name for use as directory: lowercase, replace spaces/special chars
         safe_name = name.strip().lower().replace(' ', '_')
         safe_name = ''.join(c for c in safe_name if c.isalnum() or c == '_')
         return '%s_%s' % (code, safe_name)
@@ -233,7 +246,7 @@ class SaasInstance(models.Model):
     def _get_instance_path(self):
         """Return the full remote path for this instance."""
         self.ensure_one()
-        server = self.container_physical_server_id
+        server = self.docker_server_id
         return '%s/%s/%s' % (
             server.docker_base_path.rstrip('/'),
             self._get_partner_code(),
@@ -274,21 +287,18 @@ class SaasInstance(models.Model):
         return result or None
 
     def _provision_postgresql(self):
-        """Create the PostgreSQL role and database on the PSQL server via SSH."""
+        """Create the PostgreSQL role and database on the database server via SSH."""
         self.ensure_one()
-        psql_server = self.psql_physical_server_id
+        psql_server = self.db_server_id
         if not psql_server:
-            raise UserError(_("No PSQL physical server configured on this instance."))
+            raise UserError(_("No database server configured on this instance."))
 
         db_user = self.db_user
         db_password = self.db_password
         db_name = self.subdomain
 
-        # Escape single quotes for SQL string literals
         sql_password = db_password.replace("'", "''")
 
-        # Build a single SQL script and pipe it via heredoc to avoid
-        # all shell escaping issues with passwords.
         sql_script = (
             "DO $body$\n"
             "BEGIN\n"
@@ -300,7 +310,6 @@ class SaasInstance(models.Model):
             "END $body$;\n"
         ) % {'user': db_user, 'password': sql_password}
 
-        # Use a heredoc with a quoted delimiter to prevent any shell expansion
         ensure_role_cmd = "sudo -u postgres psql <<'SAAS_END_SQL'\n%s\nSAAS_END_SQL" % sql_script
 
         create_db_cmd = (
@@ -338,9 +347,9 @@ class SaasInstance(models.Model):
     def _ensure_can_ssh(self):
         """Validate that the instance has the necessary server config for SSH."""
         self.ensure_one()
-        if not self.container_physical_server_id:
-            raise ValidationError(_("No container physical server configured."))
-        server = self.container_physical_server_id
+        if not self.docker_server_id:
+            raise ValidationError(_("No Docker server configured."))
+        server = self.docker_server_id
         if not server.ssh_key_pair_id or not server.ssh_key_pair_id.private_key_file:
             raise ValidationError(
                 _("SSH key pair with private key is required on server '%s'.")
@@ -359,7 +368,7 @@ class SaasInstance(models.Model):
         ))
 
         siblings = self.env['saas.instance'].search([
-            ('container_physical_server_id', '=', self.container_physical_server_id.id),
+            ('docker_server_id', '=', self.docker_server_id.id),
             ('id', '!=', self.id),
             ('xmlrpc_port', '!=', False),
         ])
@@ -386,7 +395,7 @@ class SaasInstance(models.Model):
         if candidate >= 65535:
             raise ValidationError(
                 _("No available port pair found on server '%s'.")
-                % self.container_physical_server_id.name
+                % self.docker_server_id.name
             )
 
         self.xmlrpc_port = str(candidate)
@@ -398,36 +407,36 @@ class SaasInstance(models.Model):
         errors = []
         if not self.subdomain:
             errors.append(_("Subdomain is required."))
-        if not self.container_physical_server_id:
-            errors.append(_("Container Physical Server is required."))
-        if not self.psql_physical_server_id:
-            errors.append(_("PSQL Physical Server is required."))
+        if not self.docker_server_id:
+            errors.append(_("Docker Server is required."))
+        if not self.db_server_id:
+            errors.append(_("Database Server is required."))
         if not self.odoo_version_id:
             errors.append(_("Odoo Version is required."))
         if not self.partner_id:
-            errors.append(_("Customer (Partner) is required."))
+            errors.append(_("Customer is required."))
         if not self.odoo_version_id or not self.odoo_version_id.docker_image:
             errors.append(_("Docker image is not set on the selected Odoo version."))
         if not self.odoo_version_id or not self.odoo_version_id.docker_image_tag:
             errors.append(_("Docker image tag is not set on the selected Odoo version."))
-        server = self.container_physical_server_id
+        server = self.docker_server_id
         if server and (not server.ssh_key_pair_id or not server.ssh_key_pair_id.private_key_file):
-            errors.append(_("Container server SSH key pair with private key is required."))
+            errors.append(_("Docker server SSH key pair with private key is required."))
         if server:
             if server.ssh_connect_using == 'private_ip' and not server.private_ip_v4:
-                errors.append(_("Container server Private IP is required (SSH is set to use Private IP)."))
+                errors.append(_("Docker server Private IP is required (SSH is set to use Private IP)."))
             elif server.ssh_connect_using == 'public_ip' and not server.ip_v4:
-                errors.append(_("Container server Public IP address is required."))
-        psql = self.psql_physical_server_id
+                errors.append(_("Docker server Public IP address is required."))
+        psql = self.db_server_id
         if psql and (not psql.ssh_key_pair_id or not psql.ssh_key_pair_id.private_key_file):
-            errors.append(_("PSQL server SSH key pair with private key is required."))
+            errors.append(_("Database server SSH key pair with private key is required."))
         if psql:
             if psql.ssh_connect_using == 'private_ip' and not psql.private_ip_v4:
-                errors.append(_("PSQL server Private IP is required (SSH is set to use Private IP)."))
+                errors.append(_("Database server Private IP is required (SSH is set to use Private IP)."))
             elif psql.ssh_connect_using == 'public_ip' and not psql.ip_v4:
-                errors.append(_("PSQL server Public IP address is required."))
+                errors.append(_("Database server Public IP address is required."))
             if not psql.private_ip_v4 and not psql.ip_v4:
-                errors.append(_("PSQL server needs at least one IP address for db_host configuration."))
+                errors.append(_("Database server needs at least one IP address for db_host configuration."))
         if errors:
             raise ValidationError('\n'.join(str(e) for e in errors))
 
@@ -442,32 +451,28 @@ class SaasInstance(models.Model):
         """Internal deploy logic for a single record."""
         self.ensure_one()
 
-        # Step 1: Validate
         self._validate_deploy_fields()
 
-        # Step 2: Auto-generate credentials if empty
         if not self.db_user:
             self.db_user = self._generate_db_user()
         if not self.db_password:
             self.db_password = self._generate_random_password()
-        if not self.admin_passwd:
-            self.admin_passwd = self._generate_random_password()
+        if not self.admin_password:
+            self.admin_password = self._generate_random_password()
 
-        # Step 3: Auto-assign ports
         self._auto_assign_ports()
 
-        # Step 4: Set state to provisioning, clear old log
         self.provisioning_log = ''
         self.state = 'provisioning'
 
-        server = self.container_physical_server_id
+        server = self.docker_server_id
         instance_path = self._get_instance_path()
         container_name = self._get_container_name()
 
         try:
             with server._get_ssh_connection() as ssh:
 
-                # Step 5: Create folder structure
+                # Create folder structure
                 self._append_log("Creating directory structure at %s" % instance_path)
                 mkdir_cmd = (
                     'mkdir -p %(path)s/addons '
@@ -481,7 +486,7 @@ class SaasInstance(models.Model):
                     )
                 self._append_log("Directory structure created.")
 
-                # Step 6: Set permissions
+                # Set permissions
                 self._append_log("Setting permissions...")
                 perms_cmd = (
                     'chown -R 1000:1000 %(path)s/data/odoo %(path)s/config %(path)s/addons && '
@@ -494,7 +499,7 @@ class SaasInstance(models.Model):
                     )
                 self._append_log("Permissions set.")
 
-                # Step 7: Render and write docker-compose.yml
+                # Render and write docker-compose.yml
                 self._append_log("Writing docker-compose.yml...")
                 dc_context = {
                     'odoo_image': self.odoo_version_id.docker_image,
@@ -513,13 +518,12 @@ class SaasInstance(models.Model):
                 )
                 self._append_log("docker-compose.yml written.")
 
-                # Step 8: Render and write odoo.conf
+                # Render and write odoo.conf
                 self._append_log("Writing odoo.conf...")
-                psql_server = self.psql_physical_server_id
-                # Always use private IP for DB connection (container and DB are on same network)
+                psql_server = self.db_server_id
                 db_host = psql_server.private_ip_v4 or psql_server.ip_v4
                 conf_context = {
-                    'master_pass': self.admin_passwd,
+                    'master_pass': self.admin_password,
                     'db_host': db_host,
                     'db_port': psql_server.psql_port or 5432,
                     'db_user': self.db_user,
@@ -535,13 +539,13 @@ class SaasInstance(models.Model):
                 )
                 self._append_log("odoo.conf written.")
 
-                # Step 8b: Create PostgreSQL user and database on PSQL server
+                # Create PostgreSQL user and database
                 self._append_log("Creating PostgreSQL role and database...")
                 self._provision_postgresql()
                 self._append_log("PostgreSQL role and database ready.")
 
-                # Step 9: Initialize Odoo database (before starting server)
-                pending_lines = self.instance_module_line_ids.filtered(
+                # Initialize Odoo database
+                pending_lines = self.module_line_ids.filtered(
                     lambda l: l.state == 'pending'
                 )
                 all_module_names = set()
@@ -580,17 +584,18 @@ class SaasInstance(models.Model):
 
                 # Track installed modules
                 if pending_lines:
-                    all_modules = self.env['saas.odoo.module']
+                    all_products = self.env['product.product']
                     for line in pending_lines:
                         line.state = 'installed'
                         if line.product_id:
-                            all_modules |= line.product_id.module_ids
+                            module_tmpls = line.product_id.product_tmpl_id.saas_module_ids
+                            all_products |= module_tmpls.mapped('product_variant_id')
                         elif line.module_id:
-                            all_modules |= line.module_id
-                    if all_modules:
-                        self.installed_module_ids = [(4, m.id) for m in all_modules]
+                            all_products |= line.module_id
+                    if all_products:
+                        self.installed_module_ids = [(4, p.id) for p in all_products]
 
-                # Step 10: Start the server
+                # Start the server
                 self._append_log("Starting container with docker compose up -d...")
                 up_cmd = 'cd %s && docker compose up -d 2>&1' % instance_path
                 exit_code, stdout, stderr = ssh.execute(up_cmd)
@@ -603,7 +608,7 @@ class SaasInstance(models.Model):
                     )
                 self._append_log("Container started.")
 
-                # Step 11: Wait for container to be ready
+                # Wait for container to be ready
                 self._append_log("Waiting for container to be ready...")
                 wait_cmd = (
                     'for i in $(seq 1 30); do '
@@ -633,7 +638,6 @@ class SaasInstance(models.Model):
                     )
                 self._append_log("Container is running.")
 
-            # Success
             self.state = 'running'
             self._append_log("Deployment completed successfully. State: running.")
 
@@ -656,7 +660,7 @@ class SaasInstance(models.Model):
         """Stop the Docker container and set state to stopped."""
         for rec in self:
             rec._ensure_can_ssh()
-            server = rec.container_physical_server_id
+            server = rec.docker_server_id
             container_name = rec._get_container_name()
             with server._get_ssh_connection() as ssh:
                 exit_code, stdout, stderr = ssh.execute(
@@ -673,7 +677,7 @@ class SaasInstance(models.Model):
         """Restart the Docker container via SSH."""
         for rec in self:
             rec._ensure_can_ssh()
-            server = rec.container_physical_server_id
+            server = rec.docker_server_id
             container_name = rec._get_container_name()
             with server._get_ssh_connection() as ssh:
                 exit_code, stdout, stderr = ssh.execute(
@@ -690,10 +694,9 @@ class SaasInstance(models.Model):
         """Redeploy: stop container and start again, keeping volumes."""
         for rec in self:
             rec._ensure_can_ssh()
-            server = rec.container_physical_server_id
+            server = rec.docker_server_id
             instance_path = rec._get_instance_path()
             with server._get_ssh_connection() as ssh:
-                # Stop without removing volumes
                 stop_cmd = 'cd %s && docker compose stop' % instance_path
                 exit_code, stdout, stderr = ssh.execute(stop_cmd)
                 if exit_code != 0:
@@ -712,7 +715,7 @@ class SaasInstance(models.Model):
         """Stop container and set state to suspended."""
         for rec in self:
             rec._ensure_can_ssh()
-            server = rec.container_physical_server_id
+            server = rec.docker_server_id
             container_name = rec._get_container_name()
             with server._get_ssh_connection() as ssh:
                 exit_code, stdout, stderr = ssh.execute(
@@ -739,9 +742,9 @@ class SaasInstance(models.Model):
             rec.state = 'draft'
 
     def _drop_postgresql(self):
-        """Drop the PostgreSQL database and role on the PSQL server via SSH."""
+        """Drop the PostgreSQL database and role on the database server via SSH."""
         self.ensure_one()
-        psql_server = self.psql_physical_server_id
+        psql_server = self.db_server_id
         if not psql_server:
             return
 
@@ -749,7 +752,6 @@ class SaasInstance(models.Model):
         db_user = self.db_user
 
         with psql_server._get_ssh_connection() as ssh:
-            # Drop the database
             if db_name:
                 drop_db_cmd = (
                     "sudo -u postgres psql -tc "
@@ -759,7 +761,6 @@ class SaasInstance(models.Model):
                 ) % {'db': db_name}
                 ssh.execute(drop_db_cmd)
 
-            # Drop the role
             if db_user:
                 drop_role_cmd = (
                     "sudo -u postgres psql -tc "
@@ -773,15 +774,13 @@ class SaasInstance(models.Model):
         """Remove container, volumes, network, database, db user, and instance folder."""
         for rec in self:
             rec._ensure_can_ssh()
-            server = rec.container_physical_server_id
+            server = rec.docker_server_id
             instance_path = rec._get_instance_path()
 
-            # Step 1: Remove container, volumes, and network via docker compose
             with server._get_ssh_connection() as ssh:
                 down_cmd = 'cd %s && docker compose down -v --remove-orphans 2>&1' % instance_path
                 ssh.execute(down_cmd)
 
-                # Step 2: Remove instance directory (configs, data, addons)
                 exit_code, stdout, stderr = ssh.execute(
                     'rm -rf %s' % instance_path,
                 )
@@ -791,9 +790,7 @@ class SaasInstance(models.Model):
                         % (instance_path, stderr)
                     )
 
-            # Step 3: Drop PostgreSQL database and role
             rec._drop_postgresql()
-
             rec.state = 'cancelled'
         return True
 
@@ -807,10 +804,10 @@ class SaasInstance(models.Model):
         """Install all pending module lines on the running instance."""
         self.ensure_one()
         self._ensure_can_ssh()
-        server = self.container_physical_server_id
+        server = self.docker_server_id
         container_name = self._get_container_name()
 
-        pending_lines = self.instance_module_line_ids.filtered(
+        pending_lines = self.module_line_ids.filtered(
             lambda l: l.state == 'pending'
         )
         if not pending_lines:
@@ -851,14 +848,14 @@ class SaasInstance(models.Model):
                 line.state = 'installed'
                 line.log = ''
                 self._append_log("Modules installed successfully: %s" % names_str)
-                # Track installed modules
-                all_modules = self.env['saas.odoo.module']
+                all_products = self.env['product.product']
                 if line.product_id:
-                    all_modules |= line.product_id.module_ids
+                    module_tmpls = line.product_id.product_tmpl_id.saas_module_ids
+                    all_products |= module_tmpls.mapped('product_variant_id')
                 elif line.module_id:
-                    all_modules |= line.module_id
-                if all_modules:
-                    self.installed_module_ids = [(4, m.id) for m in all_modules]
+                    all_products |= line.module_id
+                if all_products:
+                    self.installed_module_ids = [(4, p.id) for p in all_products]
 
     def action_get_users(self):
         return True

@@ -1,14 +1,15 @@
 from odoo import fields, models
 
 
-class SaasOdooServer(models.Model):
+class SaasBasedDomain(models.Model):
     _name = 'saas.based.domain'
-    _description = 'Based domain'
+    _description = 'Base Domain'
 
     name = fields.Char(
-        string='Name',
+        string='Domain Name',
         required=True,
         tracking=True,
+        help='The parent domain under which instance subdomains are created '
+             '(e.g. "saas.example.com"). Instances will be reachable at '
+             '<subdomain>.<domain>.',
     )
-
-

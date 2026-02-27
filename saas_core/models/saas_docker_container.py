@@ -9,37 +9,45 @@ class SaasDockerContainer(models.Model):
 
     server_id = fields.Many2one(
         'saas.container.physical.server',
-        string='Server',
+        string='Docker Server',
         required=True,
         ondelete='cascade',
+        help='The Docker host server where this container is running.',
     )
     container_id = fields.Char(
         string='Container ID',
         readonly=True,
+        help='Short 12-character Docker container identifier.',
     )
     name = fields.Char(
-        string='Name',
+        string='Container Name',
         readonly=True,
+        help='Docker container name assigned at creation.',
     )
     image = fields.Char(
         string='Image',
         readonly=True,
+        help='Docker image and tag this container was started from.',
     )
     command = fields.Char(
         string='Command',
         readonly=True,
+        help='Entrypoint command running inside the container.',
     )
     created = fields.Char(
         string='Created',
         readonly=True,
+        help='Date and time when the container was created.',
     )
     status = fields.Char(
         string='Status',
         readonly=True,
+        help='Current container status reported by Docker (e.g. "Up 3 hours", "Exited (0)").',
     )
     ports = fields.Char(
         string='Ports',
         readonly=True,
+        help='Port mappings between the host and the container.',
     )
 
     def action_stop_container(self):

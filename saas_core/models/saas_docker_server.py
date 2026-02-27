@@ -4,62 +4,68 @@ from odoo.exceptions import UserError, ValidationError
 from ..utils import SSHConnection
 
 
-class SaasPsqlPhysicalServer(models.Model):
-    _name = 'saas.psql.physical.server'
-    _description = 'PSQL physical Servers'
+class SaasContainerPhysicalServer(models.Model):
+    _name = 'saas.container.physical.server'
+    _description = 'Docker Host Server'
     _inherit = ['mail.thread']
     _order = 'sequence, name'
 
     sequence = fields.Integer(
         string='Sequence',
         default=10,
+        help='Order in which servers are displayed and selected as defaults.',
     )
-
     name = fields.Char(
         string='Name',
         required=True,
         tracking=True,
+        help='Human-readable label for this Docker host server (e.g. "EU Production 1").',
     )
     ssh_key_pair_id = fields.Many2one(
         'saas.ssh.key.pair',
         string='SSH Key Pair',
+        help='SSH key used to authenticate when connecting to this server.',
     )
-
     ssh_user = fields.Char(
         string='SSH User',
         default='root',
-        help='SSH User for connecting to this server.',
+        help='Operating system user for the SSH connection (e.g. root, ubuntu).',
     )
-
     ssh_port = fields.Integer(
         string='SSH Port',
         default=22,
-        help='SSH port for connecting to this server.',
+        help='TCP port on which the SSH daemon listens.',
     )
-
     ip_v4 = fields.Char(
-        string='Public IP v4',
+        string='Public IPv4',
+        help='Public IPv4 address of this server, reachable from the internet.',
     )
-
     private_ip_v4 = fields.Char(
-        string='Private IP v4',
-        help='Private/internal IP address. Used by Odoo containers to connect to PostgreSQL.',
+        string='Private IPv4',
+        help='Private / internal IPv4 address used for communication '
+             'between servers on the same network.',
     )
-
     ssh_connect_using = fields.Selection(
         selection=[
             ('public_ip', 'Public IP'),
             ('private_ip', 'Private IP'),
         ],
-        string='SSH Connect Using',
+        string='Connect via',
         default='public_ip',
         required=True,
-        help='Choose which IP address to use for SSH connections.',
+        help='Which IP address the SaaS manager should use when opening SSH sessions.',
     )
-
-    psql_port = fields.Integer(
-        string='PSQL Port',
-        default=5432,
+    docker_base_path = fields.Char(
+        string='Docker Base Path',
+        default='/home/odoo',
+        help='Root directory on the server where instance folders are created '
+             '(e.g. /home/odoo). Each instance gets a sub-folder here.',
+    )
+    docker_container_ids = fields.One2many(
+        'saas.docker.container',
+        'server_id',
+        string='Docker Containers',
+        help='Containers currently running on this server (populated via Refresh).',
     )
 
     def _get_ssh_ip(self):
@@ -127,3 +133,48 @@ class SaasPsqlPhysicalServer(models.Model):
             raise UserError(
                 _("SSH connection failed:\n%s") % str(e)
             )
+
+    def action_refresh_containers(self):
+        """Fetch all Docker containers from the server via SSH and update the list."""
+        self.ensure_one()
+        separator = '|||'
+        fmt = separator.join([
+            '{{.ID}}', '{{.Image}}', '{{.Command}}',
+            '{{.CreatedAt}}', '{{.Status}}', '{{.Ports}}', '{{.Names}}',
+        ])
+        cmd = "docker ps -a --format '%s' --no-trunc" % fmt
+
+        try:
+            with self._get_ssh_connection() as ssh:
+                exit_code, stdout, stderr = ssh.execute(cmd)
+                if exit_code != 0:
+                    raise UserError(
+                        _("Failed to list containers:\n%s") % stderr
+                    )
+        except (UserError, ValidationError):
+            raise
+        except Exception as e:
+            raise UserError(
+                _("SSH connection failed:\n%s") % str(e)
+            )
+
+        self.docker_container_ids.unlink()
+
+        container_model = self.env['saas.docker.container']
+        for line in stdout.strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(separator)
+            if len(parts) < 7:
+                continue
+            container_model.create({
+                'server_id': self.id,
+                'container_id': parts[0][:12],
+                'image': parts[1],
+                'command': parts[2],
+                'created': parts[3],
+                'status': parts[4],
+                'ports': parts[5],
+                'name': parts[6],
+            })

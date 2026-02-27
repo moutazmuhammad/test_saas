@@ -12,33 +12,37 @@ class SaasOdooVersion(models.Model):
     _order = 'name'
 
     name = fields.Char(
-        string='Odoo Version',
+        string='Version',
         required=True,
+        help='Odoo version identifier (e.g. "18.0", "17.0").',
     )
-
     docker_image = fields.Char(
         string='Docker Image',
+        help='Docker image repository for this Odoo version (e.g. "odoo", "myregistry/odoo").',
     )
-
     docker_image_tag = fields.Char(
-        string='Docker Image Tag',
+        string='Image Tag',
+        help='Docker image tag (e.g. "18.0", "17.0-latest"). '
+             'Combined with the image name to form the full image reference.',
     )
-
     module_ids = fields.One2many(
-        'saas.odoo.module',
-        'odoo_version_id',
+        'product.template',
+        'saas_odoo_version_id',
         string='Available Modules',
+        domain=[('saas_type', '=', 'module')],
+        help='Odoo modules available in this version, fetched from the Docker image.',
     )
-
     product_ids = fields.One2many(
-        'saas.odoo.product',
-        'odoo_version_id',
-        string='Products',
+        'product.template',
+        'saas_odoo_version_id',
+        string='Bundles',
+        domain=[('saas_type', '=', 'bundle')],
+        help='Module bundles configured for this Odoo version.',
     )
-
     module_count = fields.Integer(
         string='Modules',
         compute='_compute_module_count',
+        help='Total number of modules available in this version.',
     )
 
     def _compute_module_count(self):
@@ -50,7 +54,7 @@ class SaasOdooVersion(models.Model):
         server = self.env['saas.container.physical.server'].search([], limit=1)
         if not server:
             raise UserError(
-                _("No container physical server available to run the Docker image.")
+                _("No Docker host server available to run the Docker image.")
             )
         return server
 
@@ -69,8 +73,6 @@ class SaasOdooVersion(models.Model):
         image = self._get_docker_image()
         server = self._get_container_server()
 
-        # Python one-liner to scan all addons and output:
-        # technical_name|||display_name|||summary|||category|||author
         scan_script = (
             "import ast, os, sys; "
             "paths = ['/usr/lib/python3/dist-packages/odoo/addons', '/mnt/extra-addons']; "
@@ -100,9 +102,10 @@ class SaasOdooVersion(models.Model):
                     % (image, stderr)
                 )
 
-        # Parse output and create/update module records
         existing = {m.technical_name: m for m in self.module_ids}
         found_names = set()
+
+        ProductTemplate = self.env['product.template']
 
         for line in stdout.strip().splitlines():
             line = line.strip()
@@ -118,9 +121,8 @@ class SaasOdooVersion(models.Model):
 
             vals = {
                 'name': display_name,
-                'summary': summary,
-                'category': category,
-                'author': author,
+                'description_sale': summary,
+                'saas_author': author,
             }
 
             if technical_name in existing:
@@ -128,18 +130,18 @@ class SaasOdooVersion(models.Model):
             else:
                 vals.update({
                     'technical_name': technical_name,
-                    'odoo_version_id': self.id,
+                    'saas_odoo_version_id': self.id,
+                    'saas_type': 'module',
+                    'type': 'service',
                 })
-                self.env['saas.odoo.module'].create(vals)
+                ProductTemplate.create(vals)
 
-        # Remove modules that no longer exist in the image
         to_remove = self.module_ids.filtered(
             lambda m: m.technical_name not in found_names
         )
         if to_remove:
             to_remove.unlink()
 
-        # Fetch icons for modules that don't have one yet
         self._fetch_module_icons(server, image)
 
         return {
@@ -161,8 +163,6 @@ class SaasOdooVersion(models.Model):
             return
 
         tech_names = [m.technical_name for m in modules_needing_icons]
-
-        # Process in batches of 100 to avoid overly large stdout
         batch_size = 100
         existing_map = {m.technical_name: m for m in modules_needing_icons}
 
@@ -172,8 +172,6 @@ class SaasOdooVersion(models.Model):
 
     def _fetch_icon_batch(self, server, image, tech_names, existing_map):
         """Fetch icons for a batch of module technical names."""
-        # Python script that reads icon.png for each module and outputs:
-        # technical_name|||base64_encoded_icon_data
         icon_script = (
             "import base64, os, sys; "
             "paths = ['/usr/lib/python3/dist-packages/odoo/addons', '/mnt/extra-addons']; "

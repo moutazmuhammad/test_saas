@@ -1,21 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- Inherit base settings form to add SaaS Master settings -->
+    <!-- Inherit base settings form to add SaaS settings -->
     <record id="res_config_settings_view_form" model="ir.ui.view">
-        <field name="name">res.config.settings.view.form.inherit.saas_master</field>
+        <field name="name">res.config.settings.view.form.inherit.saas_core</field>
         <field name="model">res.config.settings</field>
         <field name="priority" eval="50"/>
         <field name="inherit_id" ref="base.res_config_settings_view_form"/>
         <field name="arch" type="xml">
             <xpath expr="//form" position="inside">
-                <app data-string="Odoo SaaS" string="Odoo SaaS" name="saas_master">
+                <app data-string="SaaS Manager" string="SaaS Manager" name="saas_core">
 
-                    <!-- Section 1: SaaS Master -->
-                    <block title="SaaS Master" name="saas_master_setting_container">
+                    <block title="Instance Defaults" name="saas_instance_defaults_container">
                         <setting id="saas_default_instance_starting_port_setting"
-                                 string="Default Instance Starting Port"
-                                 help="Default starting port of odoo instance when create physical server">
+                                 string="Default Starting Port"
+                                 help="First port number used when auto-assigning HTTP / longpolling ports to new instances.">
                             <field name="saas_default_instance_starting_port"/>
                         </setting>
                     </block>
@@ -24,13 +23,13 @@
         </field>
     </record>
 
-    <!-- Action to open settings with saas_master module context -->
+    <!-- Action to open settings with saas_core module context -->
     <record id="action_saas_master_config_settings" model="ir.actions.act_window">
         <field name="name">Settings</field>
         <field name="res_model">res.config.settings</field>
         <field name="view_mode">form</field>
         <field name="target">inline</field>
-        <field name="context">{'module': 'saas_master', 'bin_size': False}</field>
+        <field name="context">{'module': 'saas_core', 'bin_size': False}</field>
     </record>
 
 </odoo>

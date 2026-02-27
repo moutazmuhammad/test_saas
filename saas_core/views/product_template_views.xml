@@ -1,0 +1,261 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!--                     SaaS MODULE VIEWS                        -->
+    <!-- ============================================================ -->
+
+    <!-- Search View: Modules -->
+    <record id="saas_module_product_view_search" model="ir.ui.view">
+        <field name="name">product.template.saas.module.search</field>
+        <field name="model">product.template</field>
+        <field name="arch" type="xml">
+            <search string="Odoo Modules">
+                <field name="name"/>
+                <field name="technical_name"/>
+                <field name="saas_author"/>
+                <field name="saas_odoo_version_id"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_author" string="Author"
+                            context="{'group_by': 'saas_author'}"/>
+                    <filter name="group_by_version" string="Version"
+                            context="{'group_by': 'saas_odoo_version_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Kanban View: Modules -->
+    <record id="saas_module_product_view_kanban" model="ir.ui.view">
+        <field name="name">product.template.saas.module.kanban</field>
+        <field name="model">product.template</field>
+        <field name="arch" type="xml">
+            <kanban>
+                <field name="id"/>
+                <field name="name"/>
+                <field name="technical_name"/>
+                <field name="description_sale"/>
+                <field name="image_128"/>
+                <templates>
+                    <t t-name="card" class="flex-row">
+                        <aside>
+                            <field name="image_128" widget="image"/>
+                        </aside>
+                        <main>
+                            <field name="name" class="fw-bold fs-5"/>
+                            <span class="text-muted"><field name="technical_name"/></span>
+                            <field name="description_sale" class="text-muted"/>
+                            <footer>
+                                <field name="saas_author" class="badge text-bg-info"
+                                       invisible="not saas_author"/>
+                            </footer>
+                        </main>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- Form View: Modules -->
+    <record id="saas_module_product_view_form" model="ir.ui.view">
+        <field name="name">product.template.saas.module.form</field>
+        <field name="model">product.template</field>
+        <field name="arch" type="xml">
+            <form string="Odoo Module">
+                <sheet>
+                    <field name="image_1920" widget="image" class="oe_avatar"
+                           options="{'preview_image': 'image_128'}"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="Module Name"/></h1>
+                        <field name="technical_name" class="text-muted"/>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="saas_odoo_version_id"/>
+                            <field name="saas_author"/>
+                            <field name="saas_type" invisible="1"/>
+                        </group>
+                        <group>
+                            <field name="description_sale" string="Summary"/>
+                            <field name="saas_dependency_ids" widget="many2many_tags"
+                                   domain="[('saas_type', '=', 'module'), ('saas_odoo_version_id', '=', saas_odoo_version_id)]"/>
+                            <field name="list_price"/>
+                        </group>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- List View: Modules -->
+    <record id="saas_module_product_view_list" model="ir.ui.view">
+        <field name="name">product.template.saas.module.list</field>
+        <field name="model">product.template</field>
+        <field name="arch" type="xml">
+            <list string="Odoo Modules">
+                <field name="image_128" widget="image"
+                       options="{'size': [32, 32]}" string=""/>
+                <field name="name"/>
+                <field name="technical_name"/>
+                <field name="saas_author" optional="hide"/>
+                <field name="description_sale" string="Summary" optional="hide"/>
+                <field name="list_price" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Action: Modules -->
+    <record id="saas_odoo_module_action" model="ir.actions.act_window">
+        <field name="name">Odoo Modules</field>
+        <field name="res_model">product.template</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="domain">[('saas_type', '=', 'module')]</field>
+        <field name="context">{'default_saas_type': 'module', 'default_type': 'service'}</field>
+        <field name="search_view_id" ref="saas_module_product_view_search"/>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'kanban', 'view_id': ref('saas_module_product_view_kanban')}),
+            (0, 0, {'view_mode': 'list', 'view_id': ref('saas_module_product_view_list')}),
+            (0, 0, {'view_mode': 'form', 'view_id': ref('saas_module_product_view_form')}),
+        ]"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Add your first Odoo module
+            </p>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!--                     SaaS BUNDLE VIEWS                        -->
+    <!-- ============================================================ -->
+
+    <!-- Search View: Bundles -->
+    <record id="saas_bundle_product_view_search" model="ir.ui.view">
+        <field name="name">product.template.saas.bundle.search</field>
+        <field name="model">product.template</field>
+        <field name="arch" type="xml">
+            <search string="Module Bundles">
+                <field name="name"/>
+                <field name="saas_odoo_version_id"/>
+                <group expand="0" string="Group By">
+                    <filter name="group_by_version" string="Version"
+                            context="{'group_by': 'saas_odoo_version_id'}"/>
+                </group>
+            </search>
+        </field>
+    </record>
+
+    <!-- Kanban View: Bundles -->
+    <record id="saas_bundle_product_view_kanban" model="ir.ui.view">
+        <field name="name">product.template.saas.bundle.kanban</field>
+        <field name="model">product.template</field>
+        <field name="arch" type="xml">
+            <kanban>
+                <field name="id"/>
+                <field name="name"/>
+                <field name="saas_module_count"/>
+                <field name="description_sale"/>
+                <field name="image_128"/>
+                <templates>
+                    <t t-name="card" class="flex-row">
+                        <aside>
+                            <field name="image_128" widget="image"/>
+                        </aside>
+                        <main>
+                            <field name="name" class="fw-bold fs-5"/>
+                            <field name="saas_odoo_version_id"/>
+                            <span class="text-muted">
+                                <field name="saas_module_count"/> modules
+                            </span>
+                            <field name="description_sale" class="text-muted"/>
+                        </main>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- Form View: Bundles -->
+    <record id="saas_bundle_product_view_form" model="ir.ui.view">
+        <field name="name">product.template.saas.bundle.form</field>
+        <field name="model">product.template</field>
+        <field name="arch" type="xml">
+            <form string="Module Bundle">
+                <sheet>
+                    <field name="image_1920" widget="image" class="oe_avatar"
+                           options="{'preview_image': 'image_128'}"/>
+                    <div class="oe_title">
+                        <label for="name"/>
+                        <h1><field name="name" placeholder="Bundle Name"/></h1>
+                    </div>
+                    <group>
+                        <group>
+                            <field name="saas_odoo_version_id"/>
+                            <field name="saas_type" invisible="1"/>
+                            <field name="list_price"/>
+                        </group>
+                        <group>
+                            <field name="saas_module_count"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Description">
+                            <field name="description_sale" nolabel="1"
+                                   placeholder="Describe what this product bundle provides..."/>
+                        </page>
+                        <page string="Modules">
+                            <field name="saas_module_ids" nolabel="1"
+                                   domain="[('saas_type', '=', 'module'), ('saas_odoo_version_id', '=', saas_odoo_version_id)]">
+                                <list>
+                                    <field name="image_128" widget="image"
+                                           options="{'size': [32, 32]}" string=""/>
+                                    <field name="name"/>
+                                    <field name="technical_name"/>
+                                    <field name="description_sale" string="Summary"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- List View: Bundles -->
+    <record id="saas_bundle_product_view_list" model="ir.ui.view">
+        <field name="name">product.template.saas.bundle.list</field>
+        <field name="model">product.template</field>
+        <field name="arch" type="xml">
+            <list string="Module Bundles">
+                <field name="image_128" widget="image"
+                       options="{'size': [32, 32]}" string=""/>
+                <field name="name"/>
+                <field name="saas_odoo_version_id"/>
+                <field name="saas_module_count"/>
+                <field name="saas_module_ids" widget="many2many_tags"/>
+                <field name="list_price" optional="show"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- Action: Bundles -->
+    <record id="saas_odoo_product_action" model="ir.actions.act_window">
+        <field name="name">Module Bundles</field>
+        <field name="res_model">product.template</field>
+        <field name="view_mode">kanban,list,form</field>
+        <field name="domain">[('saas_type', '=', 'bundle')]</field>
+        <field name="context">{'default_saas_type': 'bundle', 'default_type': 'service'}</field>
+        <field name="search_view_id" ref="saas_bundle_product_view_search"/>
+        <field name="view_ids" eval="[(5, 0, 0),
+            (0, 0, {'view_mode': 'kanban', 'view_id': ref('saas_bundle_product_view_kanban')}),
+            (0, 0, {'view_mode': 'list', 'view_id': ref('saas_bundle_product_view_list')}),
+            (0, 0, {'view_mode': 'form', 'view_id': ref('saas_bundle_product_view_form')}),
+        ]"/>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first module bundle
+            </p>
+        </field>
+    </record>
+
+</odoo>

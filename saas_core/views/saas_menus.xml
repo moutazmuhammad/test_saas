@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <odoo>
 
-    <!-- Root Menu: SaaS Master -->
+    <!-- Root Menu -->
     <menuitem id="saas_master_menu_root"
-              name="SaaS Master"
+              name="SaaS Manager"
               sequence="50"
               web_icon="saas_master,static/description/icon.png"
               groups="base.group_user"/>
 
-    <!-- Sub-menu: Odoo Instances -->
+    <!-- Instances -->
     <menuitem id="saas_master_menu_instances"
-              name="Odoo Instances"
+              name="Instances"
               parent="saas_master_menu_root"
               action="saas_instance_action"
               sequence="10"/>
 
-    <!-- Sub-menu: Configuration -->
+    <!-- Configuration -->
     <menuitem id="saas_master_menu_configuration"
               name="Configuration"
               parent="saas_master_menu_root"
@@ -28,31 +28,30 @@
               action="action_saas_master_config_settings"
               sequence="10"/>
 
-    <!-- Configuration > Physical Servers -->
+    <!-- Configuration > Docker Servers -->
     <menuitem id="saas_master_menu_physical_servers"
-              name="Container Physical Servers"
+              name="Docker Servers"
               parent="saas_master_menu_configuration"
               action="saas_physical_server_action"
               sequence="25"/>
 
-
+    <!-- Configuration > Database Servers -->
     <menuitem id="saas_master_menu_psql_physical_servers"
-              name="PSQL Physical Servers"
+              name="Database Servers"
               parent="saas_master_menu_configuration"
               action="saas_psql_physical_server_action"
               sequence="28"/>
 
-        <!-- Configuration > Odoo based domain -->
+    <!-- Configuration > Base Domains -->
     <menuitem id="saas_master_menu_based_domain"
-              name="Based Domain"
+              name="Base Domains"
               parent="saas_master_menu_configuration"
               action="saas_odoo_based_domain_action"
               sequence="27"/>
 
-
-    <!-- Configuration > Odoo Version -->
+    <!-- Configuration > Odoo Versions -->
     <menuitem id="saas_master_menu_odoo_version"
-              name="Odoo Version"
+              name="Odoo Versions"
               parent="saas_master_menu_configuration"
               action="saas_odoo_version_action"
               sequence="28"/>
@@ -64,12 +63,11 @@
               action="saas_odoo_module_action"
               sequence="30"/>
 
-    <!-- Configuration > Module Products -->
+    <!-- Configuration > Module Bundles -->
     <menuitem id="saas_master_menu_odoo_products"
-              name="Module Products"
+              name="Module Bundles"
               parent="saas_master_menu_configuration"
               action="saas_odoo_product_action"
               sequence="32"/>
 
 </odoo>
-

@@ -6,6 +6,4 @@ access_saas_container_physical_server,saas.container.physical.server,model_saas_
 access_saas_psql_physical_server,saas.psql.physical.server,model_saas_psql_physical_server,base.group_user,1,1,1,1
 access_saas_ssh_key_pair,saas.ssh.key.pair,model_saas_ssh_key_pair,base.group_user,1,1,1,1
 access_saas_docker_container,saas.docker.container,model_saas_docker_container,base.group_user,1,1,1,1
-access_saas_odoo_module,saas.odoo.module,model_saas_odoo_module,base.group_user,1,1,1,1
-access_saas_odoo_product,saas.odoo.product,model_saas_odoo_product,base.group_user,1,1,1,1
 access_saas_instance_module_line,saas.instance.module.line,model_saas_instance_module_line,base.group_user,1,1,1,1
