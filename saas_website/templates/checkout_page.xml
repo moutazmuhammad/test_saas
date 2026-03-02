@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="checkout_page" name="SaaS Checkout">
+        <t t-call="website.layout">
+            <div id="wrap" class="oe_structure">
+                <div class="container py-5 saas-checkout-page">
+
+                    <div class="text-center mb-4">
+                        <h1 class="fw-bold">Complete Your Subscription</h1>
+                    </div>
+
+                    <!-- Error Message -->
+                    <t t-if="error">
+                        <div class="alert alert-danger text-center" role="alert">
+                            <t t-esc="error"/>
+                        </div>
+                    </t>
+
+                    <div class="row g-4">
+
+                        <!-- Checkout Form -->
+                        <div class="col-lg-7">
+                            <div class="card shadow-sm">
+                                <div class="card-body p-4">
+                                    <h4 class="mb-4">Your Details</h4>
+                                    <form method="POST" action="/subscribe/process"
+                                          id="checkoutForm">
+                                        <input type="hidden" name="csrf_token"
+                                               t-att-value="request.csrf_token()"/>
+                                        <input type="hidden" name="plan_id"
+                                               t-att-value="plan.id"/>
+                                        <input type="hidden" name="billing_period"
+                                               t-att-value="billing_period"/>
+                                        <input type="hidden" name="user_count"
+                                               t-att-value="user_count"/>
+                                        <input type="hidden" name="coupon_code"
+                                               t-att-value="coupon_code"/>
+
+                                        <!-- Customer Info (prefilled) -->
+                                        <div class="mb-3">
+                                            <label class="form-label">Name</label>
+                                            <input type="text" class="form-control"
+                                                   t-att-value="partner.name"
+                                                   readonly="readonly"/>
+                                        </div>
+                                        <div class="mb-3">
+                                            <label class="form-label">Email</label>
+                                            <input type="text" class="form-control"
+                                                   t-att-value="partner.email"
+                                                   readonly="readonly"/>
+                                        </div>
+
+                                        <!-- Subdomain -->
+                                        <div class="mb-3">
+                                            <label for="subdomain" class="form-label fw-semibold">
+                                                Choose your subdomain
+                                            </label>
+                                            <div class="input-group">
+                                                <input type="text" class="form-control"
+                                                       id="subdomain" name="subdomain"
+                                                       placeholder="your-company"
+                                                       pattern="[a-z0-9]([a-z0-9\-]{1,61}[a-z0-9])?"
+                                                       required="required"
+                                                       minlength="3" maxlength="63"/>
+                                                <span class="input-group-text">
+                                                    .<t t-esc="base_domain"/>
+                                                </span>
+                                            </div>
+                                            <div class="form-text">
+                                                3-63 characters. Lowercase letters, numbers, and hyphens only.
+                                            </div>
+                                        </div>
+
+                                        <!-- Submit -->
+                                        <button type="submit"
+                                                class="btn btn-primary btn-lg w-100 mt-3">
+                                            Subscribe Now — $<t t-esc="'%.2f' % price_info['total']"/>/<t t-esc="'mo' if billing_period == 'monthly' else 'yr'"/>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Order Summary -->
+                        <div class="col-lg-5">
+                            <div class="card shadow-sm">
+                                <div class="card-body p-4">
+                                    <h4 class="mb-4">Order Summary</h4>
+
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Plan</span>
+                                        <span class="fw-semibold"><t t-esc="plan.name"/></span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Billing</span>
+                                        <span class="fw-semibold text-capitalize">
+                                            <t t-esc="billing_period"/>
+                                        </span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Users</span>
+                                        <span class="fw-semibold"><t t-esc="user_count"/></span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Price per user</span>
+                                        <span>$<t t-esc="'%.2f' % price_info['unit_price']"/></span>
+                                    </div>
+
+                                    <hr/>
+
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Subtotal</span>
+                                        <span>$<t t-esc="'%.2f' % price_info['subtotal']"/></span>
+                                    </div>
+
+                                    <t t-if="price_info.get('discount_amount', 0) > 0">
+                                        <div class="d-flex justify-content-between mb-2 text-success">
+                                            <span>Discount
+                                                <t t-if="coupon_code">
+                                                    (<t t-esc="coupon_code"/>)
+                                                </t>
+                                            </span>
+                                            <span>-$<t t-esc="'%.2f' % price_info['discount_amount']"/></span>
+                                        </div>
+                                    </t>
+
+                                    <hr/>
+
+                                    <div class="d-flex justify-content-between fw-bold fs-5">
+                                        <span>Total</span>
+                                        <span>$<t t-esc="'%.2f' % price_info['total']"/>/<t t-esc="'mo' if billing_period == 'monthly' else 'yr'"/></span>
+                                    </div>
+
+                                    <t t-if="plan.trial_days > 0">
+                                        <div class="alert alert-info mt-3 mb-0 text-center">
+                                            Includes a <strong><t t-esc="plan.trial_days"/>-day</strong> free trial
+                                        </div>
+                                    </t>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </t>
+    </template>
+
+    <!-- ============================================================ -->
+    <!-- Thank You Page -->
+    <!-- ============================================================ -->
+    <template id="thank_you_page" name="Instance Thank You">
+        <t t-call="website.layout">
+            <div id="wrap" class="oe_structure">
+                <div class="container py-5">
+                    <div class="row justify-content-center">
+                        <div class="col-md-8 text-center">
+
+                            <t t-if="provisioning_error">
+                                <div class="alert alert-warning">
+                                    <h4>Instance Created</h4>
+                                    <p>Your instance has been created but provisioning encountered an issue.
+                                    Our team has been notified and will set it up shortly.</p>
+                                    <p class="text-muted small"><t t-esc="provisioning_error"/></p>
+                                </div>
+                            </t>
+                            <t t-else="">
+                                <div class="mb-4">
+                                    <i class="fa fa-check-circle text-success" style="font-size: 5rem;"/>
+                                </div>
+                                <h1 class="fw-bold mb-3">You're All Set!</h1>
+                                <p class="lead text-muted mb-4">
+                                    Your SaaS instance is being provisioned. You'll receive an email when it's ready.
+                                </p>
+                            </t>
+
+                            <div class="card shadow-sm mx-auto" style="max-width: 500px;">
+                                <div class="card-body p-4">
+                                    <h5 class="mb-3">Instance Details</h5>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Reference</span>
+                                        <span class="fw-semibold"><t t-esc="instance.name"/></span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Plan</span>
+                                        <span><t t-esc="instance.plan_id.name"/></span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Subdomain</span>
+                                        <span><t t-esc="instance.subdomain"/></span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Total</span>
+                                        <span class="fw-bold">
+                                            $<t t-esc="'%.2f' % instance.total_amount"/>/<t t-esc="'mo' if instance.billing_period == 'monthly' else 'yr'"/>
+                                        </span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Status</span>
+                                        <span class="badge text-bg-success"><t t-esc="instance.state"/></span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <a href="/" class="btn btn-primary mt-4">Go to Homepage</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </t>
+    </template>
+
+</odoo>

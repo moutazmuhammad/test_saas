@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- Record Rules -->
+    <!-- ============================================================ -->
+
+    <!-- Plans: public can read active plans only -->
+    <record id="saas_plan_public_rule" model="ir.rule">
+        <field name="name">SaaS Plan: Public read active only</field>
+        <field name="model_id" ref="model_saas_plan"/>
+        <field name="domain_force">[('active', '=', True)]</field>
+        <field name="groups" eval="[(4, ref('base.group_public')), (4, ref('base.group_portal'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- Plan Features: public can read all (they're linked to active plans) -->
+    <record id="saas_plan_feature_public_rule" model="ir.rule">
+        <field name="name">SaaS Plan Feature: Public read all</field>
+        <field name="model_id" ref="model_saas_plan_feature"/>
+        <field name="domain_force">[(1, '=', 1)]</field>
+        <field name="groups" eval="[(4, ref('base.group_public')), (4, ref('base.group_portal'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+    <!-- Instances: portal users can only read their own -->
+    <record id="saas_instance_portal_rule" model="ir.rule">
+        <field name="name">SaaS Instance: Portal read own</field>
+        <field name="model_id" ref="saas_core.model_saas_instance"/>
+        <field name="domain_force">[('partner_id', '=', user.partner_id.id)]</field>
+        <field name="groups" eval="[(4, ref('base.group_portal'))]"/>
+        <field name="perm_read" eval="True"/>
+        <field name="perm_write" eval="False"/>
+        <field name="perm_create" eval="False"/>
+        <field name="perm_unlink" eval="False"/>
+    </record>
+
+</odoo>

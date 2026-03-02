@@ -1,0 +1,8 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_saas_plan_public,saas.plan.public,model_saas_plan,base.group_public,1,0,0,0
+access_saas_plan_portal,saas.plan.portal,model_saas_plan,base.group_portal,1,0,0,0
+access_saas_plan_user,saas.plan.user,model_saas_plan,base.group_user,1,1,1,1
+access_saas_plan_feature_public,saas.plan.feature.public,model_saas_plan_feature,base.group_public,1,0,0,0
+access_saas_plan_feature_portal,saas.plan.feature.portal,model_saas_plan_feature,base.group_portal,1,0,0,0
+access_saas_plan_feature_user,saas.plan.feature.user,model_saas_plan_feature,base.group_user,1,1,1,1
+access_saas_coupon_user,saas.coupon.user,model_saas_coupon,base.group_user,1,1,1,1

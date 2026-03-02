@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- saas.coupon Tree View -->
+    <!-- ============================================================ -->
+    <record id="saas_coupon_view_tree" model="ir.ui.view">
+        <field name="name">saas.coupon.tree</field>
+        <field name="model">saas.coupon</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="name"/>
+                <field name="code"/>
+                <field name="discount_type"/>
+                <field name="discount_value"/>
+                <field name="valid_from"/>
+                <field name="valid_to"/>
+                <field name="max_uses"/>
+                <field name="current_uses"/>
+                <field name="active"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- saas.coupon Form View -->
+    <!-- ============================================================ -->
+    <record id="saas_coupon_view_form" model="ir.ui.view">
+        <field name="name">saas.coupon.form</field>
+        <field name="model">saas.coupon</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger"
+                            invisible="active"/>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Coupon Name"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="Coupon Details">
+                            <field name="code"/>
+                            <field name="discount_type"/>
+                            <field name="discount_value"/>
+                            <field name="active" invisible="True"/>
+                        </group>
+                        <group string="Validity">
+                            <field name="valid_from"/>
+                            <field name="valid_to"/>
+                            <field name="max_uses"/>
+                            <field name="current_uses"/>
+                        </group>
+                    </group>
+                    <group string="Plan Restrictions">
+                        <field name="plan_ids" widget="many2many_tags" nolabel="True"
+                               placeholder="Leave empty to allow all plans"/>
+                    </group>
+                </sheet>
+            </form>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- saas.coupon Action -->
+    <!-- ============================================================ -->
+    <record id="saas_coupon_action" model="ir.actions.act_window">
+        <field name="name">Coupons</field>
+        <field name="res_model">saas.coupon</field>
+        <field name="view_mode">list,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first coupon
+            </p>
+            <p>Coupons allow you to offer discounts on SaaS subscriptions.</p>
+        </field>
+    </record>
+
+</odoo>

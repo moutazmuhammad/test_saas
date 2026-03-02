@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- Website submenu under existing SaaS Manager root menu -->
+    <menuitem id="menu_saas_website"
+              name="Website"
+              parent="saas_core.saas_master_menu_root"
+              sequence="20"/>
+
+    <menuitem id="menu_saas_plans"
+              name="Plans"
+              parent="menu_saas_website"
+              action="saas_plan_action"
+              sequence="10"/>
+
+    <menuitem id="menu_saas_coupons"
+              name="Coupons"
+              parent="menu_saas_website"
+              action="saas_coupon_action"
+              sequence="20"/>
+
+
+</odoo>

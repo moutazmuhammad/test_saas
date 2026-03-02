@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <data noupdate="1">
+
+        <!-- ============================================================ -->
+        <!-- Sample Plans -->
+        <!-- ============================================================ -->
+
+        <record id="plan_starter" model="saas.plan">
+            <field name="name">Starter</field>
+            <field name="slug">starter</field>
+            <field name="description">Perfect for small teams getting started with Odoo.</field>
+            <field name="monthly_price">29.0</field>
+            <field name="yearly_price">24.0</field>
+            <field name="min_users">1</field>
+            <field name="max_users">10</field>
+            <field name="trial_days">14</field>
+            <field name="is_popular" eval="False"/>
+            <field name="sequence">10</field>
+        </record>
+
+        <record id="plan_starter_feature_1" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_starter"/>
+            <field name="name">Up to 10 users</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="plan_starter_feature_2" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_starter"/>
+            <field name="name">5 GB Storage</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="plan_starter_feature_3" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_starter"/>
+            <field name="name">Email Support</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="plan_starter_feature_4" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_starter"/>
+            <field name="name">Core Modules</field>
+            <field name="sequence">40</field>
+        </record>
+
+        <!-- Professional Plan -->
+        <record id="plan_professional" model="saas.plan">
+            <field name="name">Professional</field>
+            <field name="slug">professional</field>
+            <field name="description">Ideal for growing businesses that need more power.</field>
+            <field name="monthly_price">59.0</field>
+            <field name="yearly_price">49.0</field>
+            <field name="min_users">1</field>
+            <field name="max_users">50</field>
+            <field name="trial_days">14</field>
+            <field name="is_popular" eval="True"/>
+            <field name="sequence">20</field>
+        </record>
+
+        <record id="plan_professional_feature_1" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_professional"/>
+            <field name="name">Up to 50 users</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="plan_professional_feature_2" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_professional"/>
+            <field name="name">25 GB Storage</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="plan_professional_feature_3" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_professional"/>
+            <field name="name">Priority Support</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="plan_professional_feature_4" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_professional"/>
+            <field name="name">All Modules</field>
+            <field name="sequence">40</field>
+        </record>
+        <record id="plan_professional_feature_5" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_professional"/>
+            <field name="name">Daily Backups</field>
+            <field name="sequence">50</field>
+        </record>
+
+        <!-- Enterprise Plan -->
+        <record id="plan_enterprise" model="saas.plan">
+            <field name="name">Enterprise</field>
+            <field name="slug">enterprise</field>
+            <field name="description">For large organizations requiring maximum flexibility.</field>
+            <field name="monthly_price">99.0</field>
+            <field name="yearly_price">79.0</field>
+            <field name="min_users">5</field>
+            <field name="max_users">100</field>
+            <field name="trial_days">30</field>
+            <field name="is_popular" eval="False"/>
+            <field name="sequence">30</field>
+        </record>
+
+        <record id="plan_enterprise_feature_1" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_enterprise"/>
+            <field name="name">Up to 100 users</field>
+            <field name="sequence">10</field>
+        </record>
+        <record id="plan_enterprise_feature_2" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_enterprise"/>
+            <field name="name">Unlimited Storage</field>
+            <field name="sequence">20</field>
+        </record>
+        <record id="plan_enterprise_feature_3" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_enterprise"/>
+            <field name="name">Dedicated Support</field>
+            <field name="sequence">30</field>
+        </record>
+        <record id="plan_enterprise_feature_4" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_enterprise"/>
+            <field name="name">All Modules</field>
+            <field name="sequence">40</field>
+        </record>
+        <record id="plan_enterprise_feature_5" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_enterprise"/>
+            <field name="name">Hourly Backups</field>
+            <field name="sequence">50</field>
+        </record>
+        <record id="plan_enterprise_feature_6" model="saas.plan.feature">
+            <field name="plan_id" ref="plan_enterprise"/>
+            <field name="name">Custom Domain</field>
+            <field name="sequence">60</field>
+        </record>
+
+        <!-- ============================================================ -->
+        <!-- Sample Coupon -->
+        <!-- ============================================================ -->
+        <record id="coupon_welcome" model="saas.coupon">
+            <field name="name">Welcome Discount</field>
+            <field name="code">WELCOME20</field>
+            <field name="discount_type">percentage</field>
+            <field name="discount_value">20</field>
+            <field name="max_uses">100</field>
+        </record>
+
+    </data>
+</odoo>

@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <!-- ============================================================ -->
+    <!-- saas.plan List View -->
+    <!-- ============================================================ -->
+    <record id="saas_plan_view_list" model="ir.ui.view">
+        <field name="name">saas.plan.list</field>
+        <field name="model">saas.plan</field>
+        <field name="arch" type="xml">
+            <list>
+                <field name="sequence" widget="handle"/>
+                <field name="name"/>
+                <field name="slug"/>
+                <field name="monthly_price"/>
+                <field name="yearly_price"/>
+                <field name="min_users"/>
+                <field name="max_users"/>
+                <field name="trial_days"/>
+                <field name="odoo_version_id"/>
+                <field name="is_popular"/>
+                <field name="active" column_invisible="True"/>
+            </list>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- saas.plan Form View -->
+    <!-- ============================================================ -->
+    <record id="saas_plan_view_form" model="ir.ui.view">
+        <field name="name">saas.plan.form</field>
+        <field name="model">saas.plan</field>
+        <field name="arch" type="xml">
+            <form>
+                <sheet>
+                    <widget name="web_ribbon" title="Archived" bg_color="text-bg-danger"
+                            invisible="active"/>
+                    <div class="oe_title">
+                        <h1>
+                            <field name="name" placeholder="Plan Name"/>
+                        </h1>
+                    </div>
+                    <group>
+                        <group string="General">
+                            <field name="slug"/>
+                            <field name="description"/>
+                            <field name="odoo_version_id"/>
+                            <field name="is_popular"/>
+                            <field name="sequence"/>
+                            <field name="active" invisible="True"/>
+                        </group>
+                        <group string="Pricing">
+                            <field name="monthly_price"/>
+                            <field name="yearly_price"/>
+                            <field name="min_users"/>
+                            <field name="max_users"/>
+                            <field name="trial_days"/>
+                        </group>
+                    </group>
+                    <notebook>
+                        <page string="Features" name="features">
+                            <field name="feature_ids">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="name"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Module Bundles" name="bundles">
+                            <field name="bundle_ids">
+                                <list>
+                                    <field name="name"/>
+                                </list>
+                            </field>
+                        </page>
+                    </notebook>
+                </sheet>
+                <chatter/>
+            </form>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- saas.plan Kanban View -->
+    <!-- ============================================================ -->
+    <record id="saas_plan_view_kanban" model="ir.ui.view">
+        <field name="name">saas.plan.kanban</field>
+        <field name="model">saas.plan</field>
+        <field name="arch" type="xml">
+            <kanban>
+                <field name="name"/>
+                <field name="monthly_price"/>
+                <field name="yearly_price"/>
+                <field name="is_popular"/>
+                <field name="color"/>
+                <templates>
+                    <t t-name="card">
+                        <field name="color" widget="color_picker"/>
+                        <div class="fw-bold fs-5">
+                            <field name="name"/>
+                            <span t-if="record.is_popular.raw_value"
+                                  class="badge text-bg-warning ms-2">Popular</span>
+                        </div>
+                        <div class="text-muted">
+                            Monthly: <field name="monthly_price"/> / user
+                        </div>
+                        <div class="text-muted">
+                            Yearly: <field name="yearly_price"/> / user
+                        </div>
+                    </t>
+                </templates>
+            </kanban>
+        </field>
+    </record>
+
+    <!-- ============================================================ -->
+    <!-- saas.plan Action -->
+    <!-- ============================================================ -->
+    <record id="saas_plan_action" model="ir.actions.act_window">
+        <field name="name">Plans</field>
+        <field name="res_model">saas.plan</field>
+        <field name="view_mode">list,kanban,form</field>
+        <field name="help" type="html">
+            <p class="o_view_nocontent_smiling_face">
+                Create your first SaaS plan
+            </p>
+            <p>Define pricing plans that will be displayed on the public pricing page.</p>
+        </field>
+    </record>
+
+</odoo>

@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <template id="pricing_page" name="SaaS Pricing">
+        <t t-call="website.layout">
+            <div id="wrap" class="oe_structure">
+                <div class="container py-5 saas-pricing-page">
+
+                    <!-- Header -->
+                    <div class="text-center mb-5">
+                        <h1 class="display-4 fw-bold">Choose Your Plan</h1>
+                        <p class="lead text-muted">
+                            Simple, transparent pricing. Start free, scale as you grow.
+                        </p>
+                    </div>
+
+                    <!-- Billing Toggle -->
+                    <div class="text-center mb-4">
+                        <div class="btn-group" role="group" id="billingToggle">
+                            <button type="button"
+                                    class="btn btn-outline-primary active"
+                                    data-period="monthly">Monthly</button>
+                            <button type="button"
+                                    class="btn btn-outline-primary"
+                                    data-period="yearly">
+                                Yearly <span class="badge text-bg-success ms-1">Save 20%</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- User Count Slider -->
+                    <div class="row justify-content-center mb-4">
+                        <div class="col-md-6 text-center">
+                            <label for="userCountSlider" class="form-label fw-semibold">
+                                Number of Users: <span id="userCountDisplay" class="text-primary">1</span>
+                            </label>
+                            <input type="range" class="form-range" id="userCountSlider"
+                                   min="1" max="100" value="1"/>
+                        </div>
+                    </div>
+
+                    <!-- Plan Cards -->
+                    <div class="row justify-content-center g-4" id="planCards">
+                        <t t-foreach="plans" t-as="plan">
+                            <div class="col-lg-4 col-md-6">
+                                <div t-attf-class="card h-100 shadow-sm saas-plan-card #{'border-primary border-2' if plan.is_popular else ''}"
+                                     t-att-data-plan-id="plan.id"
+                                     t-att-data-monthly-price="plan.monthly_price"
+                                     t-att-data-yearly-price="plan.yearly_price"
+                                     t-att-data-min-users="plan.min_users"
+                                     t-att-data-max-users="plan.max_users">
+
+                                    <!-- Popular Badge -->
+                                    <t t-if="plan.is_popular">
+                                        <div class="card-header bg-primary text-white text-center py-2">
+                                            <span class="fw-bold">Most Popular</span>
+                                        </div>
+                                    </t>
+
+                                    <div class="card-body d-flex flex-column p-4">
+                                        <!-- Plan Name -->
+                                        <h3 class="card-title fw-bold text-center">
+                                            <t t-esc="plan.name"/>
+                                        </h3>
+
+                                        <!-- Description -->
+                                        <p class="text-muted text-center">
+                                            <t t-esc="plan.description"/>
+                                        </p>
+
+                                        <!-- Price Display -->
+                                        <div class="text-center my-3">
+                                            <div class="d-flex align-items-baseline justify-content-center">
+                                                <span class="display-5 fw-bold plan-price"
+                                                      t-att-data-plan-id="plan.id">
+                                                    $<t t-esc="'%.2f' % plan.monthly_price"/>
+                                                </span>
+                                                <span class="text-muted ms-1">/user/mo</span>
+                                            </div>
+                                            <div class="plan-total text-muted mt-1"
+                                                 t-att-data-plan-id="plan.id">
+                                                Total: $<t t-esc="'%.2f' % plan.monthly_price"/>/mo
+                                            </div>
+                                        </div>
+
+                                        <!-- Trial -->
+                                        <t t-if="plan.trial_days > 0">
+                                            <div class="text-center mb-3">
+                                                <span class="badge text-bg-info">
+                                                    <t t-esc="plan.trial_days"/> days free trial
+                                                </span>
+                                            </div>
+                                        </t>
+
+                                        <!-- Features -->
+                                        <ul class="list-unstyled mt-3 mb-4 flex-grow-1">
+                                            <t t-foreach="plan.feature_ids" t-as="feature">
+                                                <li class="mb-2">
+                                                    <i class="fa fa-check text-success me-2"/>
+                                                    <t t-esc="feature.name"/>
+                                                </li>
+                                            </t>
+                                        </ul>
+
+                                        <!-- CTA Button -->
+                                        <a t-attf-href="/subscribe?plan_id=#{plan.id}&amp;billing_period=monthly&amp;user_count=1"
+                                           t-attf-class="btn #{'btn-primary' if plan.is_popular else 'btn-outline-primary'} btn-lg w-100 mt-auto plan-subscribe-btn"
+                                           t-att-data-plan-id="plan.id">
+                                            Get Started
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </t>
+                    </div>
+
+                    <!-- Coupon Section -->
+                    <div class="row justify-content-center mt-5">
+                        <div class="col-md-6">
+                            <div class="card shadow-sm">
+                                <div class="card-body">
+                                    <h5 class="card-title text-center mb-3">Have a coupon code?</h5>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control"
+                                               id="couponCodeInput"
+                                               placeholder="Enter coupon code"/>
+                                        <button class="btn btn-outline-secondary"
+                                                type="button" id="applyCouponBtn">
+                                            Apply
+                                        </button>
+                                    </div>
+                                    <div id="couponFeedback" class="mt-2" style="display: none;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Price Summary (shown when coupon is applied) -->
+                    <div class="row justify-content-center mt-3" id="priceSummary" style="display: none;">
+                        <div class="col-md-6">
+                            <div class="card bg-light">
+                                <div class="card-body text-center">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <span>Subtotal:</span>
+                                        <span id="summarySubtotal">$0.00</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-1 text-success">
+                                        <span>Discount:</span>
+                                        <span id="summaryDiscount">-$0.00</span>
+                                    </div>
+                                    <hr/>
+                                    <div class="d-flex justify-content-between fw-bold fs-5">
+                                        <span>Total:</span>
+                                        <span id="summaryTotal">$0.00</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </t>
+    </template>
+
+</odoo>
