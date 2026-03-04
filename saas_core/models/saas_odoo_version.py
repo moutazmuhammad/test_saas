@@ -25,6 +25,17 @@ class SaasOdooVersion(models.Model):
         help='Docker image tag (e.g. "18.0", "17.0-latest"). '
              'Combined with the image name to form the full image reference.',
     )
+    nginx_template = fields.Selection(
+        selection=[
+            ('new', 'New (16+) — /websocket'),
+            ('old', 'Old (≤15) — /longpolling'),
+        ],
+        string='Nginx Template',
+        default='new',
+        required=True,
+        help='Nginx reverse proxy template to use for instances of this version. '
+             'Odoo 16+ uses /websocket, older versions use /longpolling.',
+    )
     module_ids = fields.One2many(
         'product.template',
         'saas_odoo_version_id',
@@ -82,10 +93,13 @@ class SaasOdooVersion(models.Model):
             "    d + '|||' + m.get('name', d) + '|||' "
             "    + m.get('summary', '').replace('\\\\n', ' ').replace('\\n', ' ') + '|||' "
             "    + m.get('category', '') + '|||' "
-            "    + m.get('author', '') + '\\n'"
+            "    + m.get('author', '') + '|||' "
+            "    + ','.join(m.get('depends', [])) + '\\n'"
             "  )"
             ")(ast.literal_eval(open(os.path.join(p, d, '__manifest__.py')).read())) "
-            "if os.path.isfile(os.path.join(p, d, '__manifest__.py')) else None "
+            "if os.path.isfile(os.path.join(p, d, '__manifest__.py')) "
+            "and ast.literal_eval(open(os.path.join(p, d, '__manifest__.py')).read()).get('application') "
+            "else None "
             "for p in paths if os.path.isdir(p) "
             "for d in sorted(os.listdir(p)) "
             "if os.path.isdir(os.path.join(p, d))"
@@ -104,6 +118,7 @@ class SaasOdooVersion(models.Model):
 
         existing = {m.technical_name: m for m in self.module_ids}
         found_names = set()
+        deps_map = {}  # technical_name -> list of dependency technical names
 
         ProductTemplate = self.env['product.template']
 
@@ -111,13 +126,17 @@ class SaasOdooVersion(models.Model):
             line = line.strip()
             if not line or '|||' not in line:
                 continue
-            parts = line.split('|||', 4)
+            parts = line.split('|||', 5)
             technical_name = parts[0].strip()
             display_name = parts[1].strip() if len(parts) > 1 else technical_name
             summary = parts[2].strip() if len(parts) > 2 else ''
             category = parts[3].strip() if len(parts) > 3 else ''
             author = parts[4].strip() if len(parts) > 4 else ''
+            depends_str = parts[5].strip() if len(parts) > 5 else ''
             found_names.add(technical_name)
+
+            if depends_str:
+                deps_map[technical_name] = [d.strip() for d in depends_str.split(',') if d.strip()]
 
             vals = {
                 'name': display_name,
@@ -141,6 +160,17 @@ class SaasOdooVersion(models.Model):
         )
         if to_remove:
             to_remove.unlink()
+
+        # Resolve dependencies: map technical names to product.template records
+        all_modules = {m.technical_name: m for m in self.module_ids}
+        for tech_name, dep_names in deps_map.items():
+            if tech_name not in all_modules:
+                continue
+            dep_records = ProductTemplate.browse()
+            for dep_name in dep_names:
+                if dep_name in all_modules:
+                    dep_records |= all_modules[dep_name]
+            all_modules[tech_name].saas_dependency_ids = dep_records
 
         self._fetch_module_icons(server, image)
 

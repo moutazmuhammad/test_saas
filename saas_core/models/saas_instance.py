@@ -638,6 +638,11 @@ class SaasInstance(models.Model):
                     )
                 self._append_log("Container is running.")
 
+                # Configure Nginx reverse proxy with SSL
+                self._append_log("Configuring Nginx reverse proxy with SSL...")
+                self._provision_nginx(ssh)
+                self._append_log("Nginx configured successfully.")
+
             self.state = 'running'
             self._append_log("Deployment completed successfully. State: running.")
 
@@ -790,6 +795,11 @@ class SaasInstance(models.Model):
                         % (instance_path, stderr)
                     )
 
+                # Remove Nginx config and reload
+                nginx_path = '/etc/nginx/sites-enabled/%s' % rec.subdomain
+                ssh.execute('rm -f %s' % nginx_path)
+                ssh.execute('systemctl reload nginx 2>&1')
+
             rec._drop_postgresql()
             rec.state = 'cancelled'
         return True
@@ -856,6 +866,78 @@ class SaasInstance(models.Model):
                     all_products |= line.module_id
                 if all_products:
                     self.installed_module_ids = [(4, p.id) for p in all_products]
+
+    def _get_nginx_template_name(self):
+        """Return the appropriate nginx template based on the Odoo version's nginx_template field."""
+        self.ensure_one()
+        if self.odoo_version_id.nginx_template == 'old':
+            return 'nginx_old_odoo_versions.jinja'
+        return 'nginx_new_odoo_versions.jinja'
+
+    def _provision_nginx(self, ssh):
+        """Obtain SSL certificate via Certbot and deploy Nginx config on the Docker server."""
+        self.ensure_one()
+        domain = self.name  # e.g. acme.odoo.example.com
+        if not domain:
+            raise UserError(_("Instance domain name is not set."))
+
+        # Step 1: Obtain SSL certificate via Certbot
+        self._append_log("Requesting SSL certificate for %s..." % domain)
+        certbot_cmd = (
+            'certbot certonly --nginx -d %(domain)s '
+            '--non-interactive --agree-tos '
+            '--register-unsafely-without-email 2>&1'
+        ) % {'domain': domain}
+        exit_code, stdout, stderr = ssh.execute(certbot_cmd, timeout=120)
+        if exit_code != 0:
+            # Try standalone mode as fallback
+            self._append_log(
+                "Certbot --nginx failed, trying standalone mode..."
+            )
+            certbot_cmd = (
+                'certbot certonly --standalone -d %(domain)s '
+                '--non-interactive --agree-tos '
+                '--register-unsafely-without-email 2>&1'
+            ) % {'domain': domain}
+            exit_code, stdout, stderr = ssh.execute(certbot_cmd, timeout=120)
+            if exit_code != 0:
+                raise UserError(
+                    _("Failed to obtain SSL certificate for '%s':\n%s\n%s")
+                    % (domain, stdout[-500:], stderr[-500:])
+                )
+        self._append_log("SSL certificate obtained for %s." % domain)
+
+        # Step 2: Render Nginx config from the appropriate template
+        template_name = self._get_nginx_template_name()
+        nginx_context = {
+            'subdomain': self.subdomain,
+            'subdomainchat': '%s-chat' % self.subdomain,
+            'http_port': self.xmlrpc_port,
+            'longpolling_port': self.longpolling_port,
+            'domain': domain,
+        }
+        nginx_content = self._render_template(template_name, nginx_context)
+
+        # Step 3: Write Nginx config to sites-enabled
+        nginx_path = '/etc/nginx/sites-enabled/%s' % self.subdomain
+        self._append_log("Writing Nginx config to %s..." % nginx_path)
+        ssh.write_file(nginx_path, nginx_content)
+
+        # Step 4: Test and reload Nginx
+        exit_code, stdout, stderr = ssh.execute('nginx -t 2>&1')
+        if exit_code != 0:
+            # Remove the broken config to avoid breaking other sites
+            ssh.execute('rm -f %s' % nginx_path)
+            raise UserError(
+                _("Nginx configuration test failed:\n%s\n%s")
+                % (stdout, stderr)
+            )
+        exit_code, stdout, stderr = ssh.execute('systemctl reload nginx 2>&1')
+        if exit_code != 0:
+            raise UserError(
+                _("Failed to reload Nginx:\n%s\n%s") % (stdout, stderr)
+            )
+        self._append_log("Nginx reloaded successfully.")
 
     def action_get_users(self):
         return True

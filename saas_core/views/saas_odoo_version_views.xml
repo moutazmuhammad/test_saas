@@ -29,6 +29,7 @@
                         <group>
                             <field name="docker_image"/>
                             <field name="docker_image_tag"/>
+                            <field name="nginx_template"/>
                         </group>
                     </group>
                     <notebook>
