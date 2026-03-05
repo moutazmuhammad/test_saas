@@ -14,6 +14,11 @@
                 <field name="created"/>
                 <field name="status"/>
                 <field name="ports"/>
+                <button name="action_view_logs"
+                        string="Logs"
+                        type="object"
+                        icon="fa-file-text-o"
+                        class="btn-link text-info"/>
                 <button name="action_stop_container"
                         string="Stop"
                         type="object"

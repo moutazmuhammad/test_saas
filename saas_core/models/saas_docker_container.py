@@ -77,3 +77,17 @@ class SaasDockerContainer(models.Model):
                     _("Failed to restart container '%s':\n%s") % (self.name, stderr)
                 )
         return server.action_refresh_containers()
+
+    def action_view_logs(self):
+        """Open a live log stream for this container."""
+        self.ensure_one()
+        return {
+            'type': 'ir.actions.client',
+            'tag': 'container_logs_stream',
+            'name': _("Logs: %s") % self.name,
+            'context': {
+                'stream_url': '/saas/container/%d/logs/stream' % self.id,
+                'container_name': self.name,
+                'tail': 100,
+            },
+        }

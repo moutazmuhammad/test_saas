@@ -13,6 +13,7 @@
                   decoration-muted="state in ('draft', 'stopped')"
                   decoration-info="state == 'provisioning'">
                 <field name="subdomain"/>
+                <field name="plan_id" optional="show"/>
                 <field name="partner_id"/>
                 <field name="odoo_version_id"/>
                 <field name="docker_server_id"/>
@@ -67,9 +68,9 @@
                             type="object" icon="fa-cog"
                             invisible="state != 'running'"/>
 
-                    <!-- Refresh Usage: when running -->
-                    <button name="action_refresh_usage" string="Refresh Usage"
-                            type="object" icon="fa-bar-chart"
+                    <!-- Live Logs: when running -->
+                    <button name="action_view_logs" string="Logs"
+                            type="object" icon="fa-file-text-o"
                             invisible="state != 'running'"/>
 
                     <!-- Create Backup: when running -->
@@ -93,21 +94,12 @@
                            statusbar_visible="draft,provisioning,running,stopped,suspended,cancelled"/>
                 </header>
                 <sheet>
-                    <!-- Title: Subdomain . Base Domain -->
-                    <div class="oe_title">
-                        <label for="subdomain" string="Subdomain"/>
-                        <h1>
-                            <field name="subdomain" class="oe_inline"
-                                   placeholder="e.g. test1"/>
-                            <span> . </span>
-                            <field name="domain_id" class="oe_inline"
-                                   options="{'no_open': True}"/>
-                        </h1>
-                    </div>
-
                     <group>
                         <!-- Left Column -->
                         <group>
+                            <field name="subdomain"/>
+                            <field name="domain_id" options="{'no_open': True}"/>
+                            <field name="plan_id"/>
                             <field name="partner_id"/>
                             <field name="url" widget="url"/>
                             <field name="odoo_version_id"/>
@@ -125,8 +117,14 @@
                     </group>
 
                     <!-- Resource Usage -->
-                    <group string="Resource Usage"
-                           invisible="state != 'running'">
+                    <div class="d-flex align-items-center"
+                         invisible="state != 'running'">
+                        <h2 class="me-3">Resource Usage</h2>
+                        <button name="action_refresh_usage" string="Refresh"
+                                type="object" icon="fa-refresh"
+                                class="btn-link"/>
+                    </div>
+                    <group invisible="state != 'running'">
                         <group>
                             <field name="cpu_usage"/>
                             <field name="ram_usage"/>
@@ -169,6 +167,10 @@
                                            required="1"
                                            options="{'no_create': True}"
                                            domain="[('saas_type', '=', 'module'), ('saas_odoo_version_id', '=', odoo_version_id)]"/>
+                                    <field name="module_source" widget="badge"
+                                           decoration-info="module_source == 'standard'"
+                                           decoration-success="module_source == 'custom'"
+                                           optional="show"/>
                                     <field name="state" widget="badge"
                                            decoration-success="state == 'installed'"
                                            decoration-danger="state == 'failed'"
@@ -212,6 +214,37 @@
                                     <button name="action_delete_backup" type="object"
                                             string="Delete" icon="fa-trash"
                                             confirm="This will permanently delete this backup from cloud storage. Continue?"/>
+                                    <field name="error_message" optional="hide"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Custom Repos">
+                            <field name="repo_ids" nolabel="1">
+                                <list editable="bottom">
+                                    <field name="sequence" widget="handle"/>
+                                    <field name="repo_url" placeholder="https://github.com/user/repo.git"/>
+                                    <field name="branch"/>
+                                    <field name="github_token" password="True"
+                                           placeholder="ghp_... (private repos only)"/>
+                                    <field name="addons_subdir"
+                                           placeholder="e.g. addons/ (optional)"/>
+                                    <field name="state" widget="badge"
+                                           decoration-success="state == 'cloned'"
+                                           decoration-danger="state == 'error'"
+                                           decoration-info="state == 'pending'"/>
+                                    <field name="last_pull"/>
+                                    <button name="action_clone_repo" type="object"
+                                            string="Clone" icon="fa-clone"
+                                            invisible="state == 'cloned'"/>
+                                    <button name="action_pull_repo" type="object"
+                                            string="Pull" icon="fa-download"
+                                            invisible="state != 'cloned'"/>
+                                    <button name="action_clone_repo" type="object"
+                                            string="Re-clone" icon="fa-refresh"
+                                            invisible="state != 'error'"/>
+                                    <button name="action_remove_repo" type="object"
+                                            string="Remove" icon="fa-trash"
+                                            confirm="Remove this repo from the server?"/>
                                     <field name="error_message" optional="hide"/>
                                 </list>
                             </field>

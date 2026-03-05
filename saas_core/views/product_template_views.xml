@@ -15,7 +15,14 @@
                 <field name="technical_name"/>
                 <field name="saas_author"/>
                 <field name="saas_odoo_version_id"/>
+                <separator/>
+                <filter name="filter_standard" string="Standard"
+                        domain="[('saas_source', '=', 'standard')]"/>
+                <filter name="filter_custom" string="Custom Repo"
+                        domain="[('saas_source', '=', 'custom')]"/>
                 <group expand="0" string="Group By">
+                    <filter name="group_by_source" string="Source"
+                            context="{'group_by': 'saas_source'}"/>
                     <filter name="group_by_author" string="Author"
                             context="{'group_by': 'saas_author'}"/>
                     <filter name="group_by_version" string="Version"
@@ -36,6 +43,7 @@
                 <field name="technical_name"/>
                 <field name="description_sale"/>
                 <field name="image_128"/>
+                <field name="saas_source"/>
                 <templates>
                     <t t-name="card" class="flex-row">
                         <aside>
@@ -46,6 +54,9 @@
                             <span class="text-muted"><field name="technical_name"/></span>
                             <field name="description_sale" class="text-muted"/>
                             <footer>
+                                <field name="saas_source" widget="badge"
+                                       decoration-info="saas_source == 'standard'"
+                                       decoration-success="saas_source == 'custom'"/>
                                 <field name="saas_author" class="badge text-bg-info"
                                        invisible="not saas_author"/>
                             </footer>
@@ -74,6 +85,9 @@
                         <group>
                             <field name="saas_odoo_version_id"/>
                             <field name="saas_author"/>
+                            <field name="saas_source"/>
+                            <field name="saas_source_repo_id"
+                                   invisible="saas_source != 'custom'"/>
                             <field name="saas_type" invisible="1"/>
                         </group>
                         <group>
@@ -98,6 +112,9 @@
                        options="{'size': [32, 32]}" string=""/>
                 <field name="name"/>
                 <field name="technical_name"/>
+                <field name="saas_source" widget="badge"
+                       decoration-info="saas_source == 'standard'"
+                       decoration-success="saas_source == 'custom'"/>
                 <field name="saas_author" optional="hide"/>
                 <field name="description_sale" string="Summary" optional="hide"/>
                 <field name="list_price" optional="show"/>
@@ -137,7 +154,14 @@
             <search string="Module Bundles">
                 <field name="name"/>
                 <field name="saas_odoo_version_id"/>
+                <separator/>
+                <filter name="filter_standard" string="Standard"
+                        domain="[('saas_source', '=', 'standard')]"/>
+                <filter name="filter_custom" string="Custom Repo"
+                        domain="[('saas_source', '=', 'custom')]"/>
                 <group expand="0" string="Group By">
+                    <filter name="group_by_source" string="Source"
+                            context="{'group_by': 'saas_source'}"/>
                     <filter name="group_by_version" string="Version"
                             context="{'group_by': 'saas_odoo_version_id'}"/>
                 </group>
@@ -156,6 +180,8 @@
                 <field name="saas_module_count"/>
                 <field name="description_sale"/>
                 <field name="image_128"/>
+                <field name="saas_source"/>
+                <field name="repo_state"/>
                 <templates>
                     <t t-name="card" class="flex-row">
                         <aside>
@@ -168,6 +194,16 @@
                                 <field name="saas_module_count"/> modules
                             </span>
                             <field name="description_sale" class="text-muted"/>
+                            <footer>
+                                <field name="saas_source" widget="badge"
+                                       decoration-info="saas_source == 'standard'"
+                                       decoration-success="saas_source == 'custom'"/>
+                                <field name="repo_state" widget="badge"
+                                       decoration-success="repo_state == 'cloned'"
+                                       decoration-danger="repo_state == 'error'"
+                                       decoration-info="repo_state == 'pending'"
+                                       invisible="not repo_state"/>
+                            </footer>
                         </main>
                     </t>
                 </templates>
@@ -181,6 +217,25 @@
         <field name="model">product.template</field>
         <field name="arch" type="xml">
             <form string="Module Bundle">
+                <header>
+                    <!-- Clone: when repo_url is set and not yet cloned -->
+                    <button name="action_clone_repo" string="Clone Repo"
+                            type="object" class="btn-primary" icon="fa-clone"
+                            invisible="not repo_url or repo_state == 'cloned'"/>
+                    <!-- Re-clone: when error -->
+                    <button name="action_clone_repo" string="Re-clone Repo"
+                            type="object" class="btn-warning" icon="fa-refresh"
+                            invisible="repo_state != 'error'"/>
+                    <!-- Fetch Modules: when cloned -->
+                    <button name="action_fetch_repo_modules"
+                            string="Fetch Modules &amp; Icons"
+                            type="object" class="oe_highlight" icon="fa-download"
+                            invisible="repo_state != 'cloned'"/>
+                    <!-- Pull: when cloned -->
+                    <button name="action_pull_repo" string="Pull Repo"
+                            type="object" icon="fa-refresh"
+                            invisible="repo_state != 'cloned'"/>
+                </header>
                 <sheet>
                     <field name="image_1920" widget="image" class="oe_avatar"
                            options="{'preview_image': 'image_128'}"/>
@@ -196,13 +251,39 @@
                         </group>
                         <group>
                             <field name="saas_module_count"/>
+                            <field name="saas_source" invisible="1"/>
+                            <field name="saas_source_repo_id" invisible="1"/>
                         </group>
                     </group>
+
+                    <!-- Repository: always visible so user can fill repo_url to make it a custom bundle -->
+                    <group string="Repository (fill to make this a custom repo bundle)">
+                        <group>
+                            <field name="repo_url"
+                                   placeholder="https://github.com/user/repo.git"/>
+                            <field name="repo_branch"
+                                   invisible="not repo_url"/>
+                            <field name="repo_github_token" password="True"
+                                   placeholder="ghp_... (private repos only)"
+                                   invisible="not repo_url"/>
+                        </group>
+                        <group>
+                            <field name="repo_addons_subdir"
+                                   placeholder="e.g. addons/ (optional)"
+                                   invisible="not repo_url"/>
+                            <field name="repo_state" widget="badge"
+                                   decoration-success="repo_state == 'cloned'"
+                                   decoration-danger="repo_state == 'error'"
+                                   decoration-info="repo_state == 'pending'"
+                                   invisible="not repo_url"/>
+                            <field name="repo_last_pull"
+                                   invisible="not repo_url"/>
+                            <field name="repo_error"
+                                   invisible="repo_state != 'error'"/>
+                        </group>
+                    </group>
+
                     <notebook>
-                        <page string="Description">
-                            <field name="description_sale" nolabel="1"
-                                   placeholder="Describe what this product bundle provides..."/>
-                        </page>
                         <page string="Modules">
                             <field name="saas_module_ids" nolabel="1"
                                    domain="[('saas_type', '=', 'module'), ('saas_odoo_version_id', '=', saas_odoo_version_id)]">
@@ -214,6 +295,10 @@
                                     <field name="description_sale" string="Summary"/>
                                 </list>
                             </field>
+                        </page>
+                        <page string="Description">
+                            <field name="description_sale" nolabel="1"
+                                   placeholder="Describe what this product bundle provides..."/>
                         </page>
                     </notebook>
                 </sheet>
@@ -231,6 +316,14 @@
                        options="{'size': [32, 32]}" string=""/>
                 <field name="name"/>
                 <field name="saas_odoo_version_id"/>
+                <field name="saas_source" widget="badge"
+                       decoration-info="saas_source == 'standard'"
+                       decoration-success="saas_source == 'custom'"/>
+                <field name="repo_state" widget="badge"
+                       decoration-success="repo_state == 'cloned'"
+                       decoration-danger="repo_state == 'error'"
+                       decoration-info="repo_state == 'pending'"
+                       optional="show"/>
                 <field name="saas_module_count"/>
                 <field name="saas_module_ids" widget="many2many_tags"/>
                 <field name="list_price" optional="show"/>

@@ -1,4 +1,5 @@
 from . import saas_instance
+from . import saas_plan
 from . import res_config_settings
 from . import saas_ssh_key_pair
 from . import saas_docker_server
@@ -9,3 +10,5 @@ from . import product_template
 from . import saas_instance_module_line
 from . import saas_domain
 from . import saas_instance_backup
+from . import saas_instance_repo
+from . import saas_version_repo

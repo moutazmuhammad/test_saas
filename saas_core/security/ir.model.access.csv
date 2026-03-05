@@ -8,3 +8,7 @@ access_saas_ssh_key_pair,saas.ssh.key.pair,model_saas_ssh_key_pair,base.group_us
 access_saas_docker_container,saas.docker.container,model_saas_docker_container,base.group_user,1,1,1,1
 access_saas_instance_module_line,saas.instance.module.line,model_saas_instance_module_line,base.group_user,1,1,1,1
 access_saas_instance_backup,saas.instance.backup,model_saas_instance_backup,base.group_user,1,1,1,1
+access_saas_plan,saas.plan,model_saas_plan,base.group_user,1,1,1,1
+access_saas_instance_repo,saas.instance.repo,model_saas_instance_repo,base.group_user,1,1,1,1
+access_saas_version_repo,saas.version.repo,model_saas_version_repo,base.group_user,1,1,1,1
+access_saas_config_viewer,saas.config.viewer,model_saas_config_viewer,base.group_user,1,1,1,1

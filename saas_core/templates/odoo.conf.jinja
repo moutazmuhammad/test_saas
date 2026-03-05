@@ -8,6 +8,9 @@ db_password = {{ db_password }}
 
 data_dir = /var/lib/odoo
 addons_path = /mnt/extra-addons
+{%- for path in repo_addons_paths | default([]) -%}
+,{{ path }}
+{%- endfor %}
 
 proxy_mode = {{ proxy_mode | default(True) }}
 

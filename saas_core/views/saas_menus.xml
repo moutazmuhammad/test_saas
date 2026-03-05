@@ -28,6 +28,13 @@
               action="action_saas_master_config_settings"
               sequence="10"/>
 
+    <!-- Configuration > Plans -->
+    <menuitem id="saas_master_menu_plans"
+              name="Plans"
+              parent="saas_master_menu_configuration"
+              action="saas_plan_action"
+              sequence="15"/>
+
     <!-- Configuration > Docker Servers -->
     <menuitem id="saas_master_menu_physical_servers"
               name="Docker Servers"

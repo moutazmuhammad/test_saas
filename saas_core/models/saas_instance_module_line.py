@@ -53,6 +53,11 @@ class SaasInstanceModuleLine(models.Model):
         readonly=True,
         help='Current installation status: Pending (queued), Installed (success), or Failed.',
     )
+    module_source = fields.Selection(
+        related='module_id.saas_source',
+        string='Source',
+        readonly=True,
+    )
     log = fields.Text(
         string='Log',
         readonly=True,

@@ -40,6 +40,10 @@
                                            options="{'size': [32, 32]}" string=""/>
                                     <field name="technical_name"/>
                                     <field name="name"/>
+                                    <field name="saas_source" widget="badge"
+                                           decoration-info="saas_source == 'standard'"
+                                           decoration-success="saas_source == 'custom'"/>
+                                    <field name="saas_source_repo_id" optional="hide"/>
                                     <field name="saas_author" optional="show"/>
                                     <field name="description_sale" string="Summary" optional="show"/>
                                     <field name="saas_dependency_ids" widget="many2many_tags"
@@ -53,6 +57,14 @@
                                     <field name="image_128" widget="image"
                                            options="{'size': [32, 32]}" string=""/>
                                     <field name="name"/>
+                                    <field name="saas_source" widget="badge"
+                                           decoration-info="saas_source == 'standard'"
+                                           decoration-success="saas_source == 'custom'"/>
+                                    <field name="repo_state" widget="badge"
+                                           decoration-success="repo_state == 'cloned'"
+                                           decoration-danger="repo_state == 'error'"
+                                           decoration-info="repo_state == 'pending'"
+                                           optional="show"/>
                                     <field name="description_sale" string="Description" optional="show"/>
                                     <field name="saas_module_ids" widget="many2many_tags"
                                            domain="[('saas_type', '=', 'module'), ('saas_odoo_version_id', '=', parent.id)]"/>

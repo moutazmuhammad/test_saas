@@ -50,6 +50,11 @@ class SaasOdooVersion(models.Model):
         domain=[('saas_type', '=', 'bundle')],
         help='Module bundles configured for this Odoo version.',
     )
+    repo_ids = fields.One2many(
+        'saas.version.repo',
+        'version_id',
+        string='Custom Repositories',
+    )
     module_count = fields.Integer(
         string='Modules',
         compute='_compute_module_count',
@@ -79,7 +84,7 @@ class SaasOdooVersion(models.Model):
         return '%s:%s' % (self.docker_image, self.docker_image_tag)
 
     def action_fetch_modules(self):
-        """Fetch available modules from the Docker image by scanning addons manifests."""
+        """Fetch available standard modules from the Docker image."""
         self.ensure_one()
         image = self._get_docker_image()
         server = self._get_container_server()
@@ -116,9 +121,15 @@ class SaasOdooVersion(models.Model):
                     % (image, stderr)
                 )
 
-        existing = {m.technical_name: m for m in self.module_ids}
+        # Only touch standard modules — leave custom repo modules untouched
+        existing = {
+            m.technical_name: m
+            for m in self.module_ids.filtered(
+                lambda m: m.saas_source != 'custom'
+            )
+        }
         found_names = set()
-        deps_map = {}  # technical_name -> list of dependency technical names
+        deps_map = {}
 
         ProductTemplate = self.env['product.template']
 
@@ -142,6 +153,7 @@ class SaasOdooVersion(models.Model):
                 'name': display_name,
                 'description_sale': summary,
                 'saas_author': author,
+                'saas_source': 'standard',
             }
 
             if technical_name in existing:
@@ -155,13 +167,14 @@ class SaasOdooVersion(models.Model):
                 })
                 ProductTemplate.create(vals)
 
+        # Only remove standard modules that disappeared
         to_remove = self.module_ids.filtered(
-            lambda m: m.technical_name not in found_names
+            lambda m: m.saas_source != 'custom' and m.technical_name not in found_names
         )
         if to_remove:
             to_remove.unlink()
 
-        # Resolve dependencies: map technical names to product.template records
+        # Resolve dependencies
         all_modules = {m.technical_name: m for m in self.module_ids}
         for tech_name, dep_names in deps_map.items():
             if tech_name not in all_modules:
@@ -179,16 +192,18 @@ class SaasOdooVersion(models.Model):
             'tag': 'display_notification',
             'params': {
                 'title': _("Modules Fetched"),
-                'message': _("%d modules found for %s.") % (len(found_names), image),
+                'message': _("%d standard modules found for %s.") % (len(found_names), image),
                 'type': 'success',
                 'sticky': False,
             },
         }
 
     def _fetch_module_icons(self, server, image):
-        """Fetch module icons from the Docker image for modules that don't have an image yet."""
+        """Fetch module icons from the Docker image for standard modules without an image."""
         self.ensure_one()
-        modules_needing_icons = self.module_ids.filtered(lambda m: not m.image_1920)
+        modules_needing_icons = self.module_ids.filtered(
+            lambda m: not m.image_1920 and m.saas_source != 'custom'
+        )
         if not modules_needing_icons:
             return
 

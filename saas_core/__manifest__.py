@@ -31,6 +31,8 @@ Key capabilities:
         'security/ir.model.access.csv',
         'data/ir_config_parameter.xml',
         'data/saas_backup_cron.xml',
+        'data/saas_storage_check_cron.xml',
+        'views/saas_plan_views.xml',
         'views/saas_instance_views.xml',
         'views/saas_ssh_key_pair_views.xml',
         'views/saas_docker_container_views.xml',
@@ -41,7 +43,14 @@ Key capabilities:
         'views/product_template_views.xml',
         'views/res_config_settings_views.xml',
         'views/saas_menus.xml',
+        'wizards/saas_config_viewer_views.xml',
     ],
+    'assets': {
+        'web.assets_backend': [
+            'saas_core/static/src/components/container_logs/container_logs.js',
+            'saas_core/static/src/components/container_logs/container_logs.xml',
+        ],
+    },
     'installable': True,
     'application': True,
     'auto_install': False,
