@@ -146,6 +146,43 @@ class SaasInstance(models.Model):
         string='Backup Count', compute='_compute_backup_count',
     )
 
+    # ========== Resource Usage ==========
+    cpu_usage = fields.Char(
+        string='CPU Usage',
+        readonly=True,
+        help='Current CPU usage percentage of the Docker container.',
+    )
+    ram_usage = fields.Char(
+        string='RAM Usage',
+        readonly=True,
+        help='Current RAM usage of the Docker container (used / limit).',
+    )
+    ram_percent = fields.Char(
+        string='RAM %',
+        readonly=True,
+        help='Current RAM usage percentage of the Docker container.',
+    )
+    disk_usage = fields.Char(
+        string='Container Disk',
+        readonly=True,
+        help='Disk space used by the instance folder on the Docker server.',
+    )
+    db_size = fields.Char(
+        string='Database Size',
+        readonly=True,
+        help='Size of the PostgreSQL database on the database server.',
+    )
+    total_storage = fields.Char(
+        string='Total Storage Size',
+        readonly=True,
+        help='Total storage: container files + PostgreSQL database.',
+    )
+    usage_last_updated = fields.Datetime(
+        string='Usage Last Updated',
+        readonly=True,
+        help='Last time resource usage statistics were refreshed.',
+    )
+
     # ========== Operations ==========
     provisioning_log = fields.Text(
         string='Provisioning Log',
@@ -453,6 +490,89 @@ class SaasInstance(models.Model):
                 errors.append(_("Database server needs at least one IP address for db_host configuration."))
         if errors:
             raise ValidationError('\n'.join(str(e) for e in errors))
+
+    # ========== Resource Usage ==========
+
+    @staticmethod
+    def _format_bytes(size_bytes):
+        """Format bytes into a human-readable string."""
+        if size_bytes < 1024:
+            return '%d B' % size_bytes
+        elif size_bytes < 1024 ** 2:
+            return '%.1f KB' % (size_bytes / 1024.0)
+        elif size_bytes < 1024 ** 3:
+            return '%.1f MB' % (size_bytes / 1024.0 ** 2)
+        else:
+            return '%.2f GB' % (size_bytes / 1024.0 ** 3)
+
+    def action_refresh_usage(self):
+        """Fetch CPU, RAM, disk, and database size for this instance."""
+        for rec in self:
+            rec._ensure_can_ssh()
+            container_name = rec._get_container_name()
+            server = rec.docker_server_id
+            instance_path = rec._get_instance_path()
+
+            with server._get_ssh_connection() as ssh:
+                # Fetch container CPU & RAM via docker stats table output
+                stats_cmd = 'docker stats --no-stream %s' % container_name
+                exit_code, stdout, stderr = ssh.execute(stats_cmd)
+                if exit_code == 0 and stdout.strip():
+                    lines = stdout.strip().splitlines()
+                    if len(lines) >= 2:
+                        # Parse the table: CONTAINER ID  NAME  CPU %  MEM USAGE / LIMIT  MEM %  ...
+                        values = lines[1].split()
+                        # Find CPU % (contains %)
+                        for i, val in enumerate(values):
+                            if '%' in val:
+                                rec.cpu_usage = val
+                                # Memory usage is next fields: e.g. "50MiB / 2GiB"
+                                # then mem %
+                                remaining = values[i+1:]
+                                # Find mem usage pattern: "XXMiB" "/" "XXGiB"
+                                if len(remaining) >= 3:
+                                    rec.ram_usage = '%s %s %s' % (
+                                        remaining[0], remaining[1], remaining[2],
+                                    )
+                                if len(remaining) >= 4 and '%' in remaining[3]:
+                                    rec.ram_percent = remaining[3]
+                                break
+
+                # Fetch disk usage of the instance folder (in bytes)
+                disk_cmd = 'du -sb %s 2>/dev/null | cut -f1' % instance_path
+                exit_code, stdout, stderr = ssh.execute(disk_cmd)
+                disk_bytes = 0
+                if exit_code == 0 and stdout.strip():
+                    try:
+                        disk_bytes = int(stdout.strip())
+                    except (ValueError, TypeError):
+                        pass
+                rec.disk_usage = rec._format_bytes(disk_bytes) if disk_bytes else ''
+
+            # Fetch database size from PostgreSQL server (in bytes)
+            db_bytes = 0
+            if rec.db_server_id and rec.subdomain:
+                try:
+                    with rec.db_server_id._get_ssh_connection() as ssh:
+                        db_size_cmd = (
+                            "sudo -u postgres psql -At -c "
+                            "'SELECT pg_database_size($$%s$$);'"
+                        ) % rec.subdomain
+                        exit_code, stdout, stderr = ssh.execute(db_size_cmd)
+                        if exit_code == 0 and stdout.strip():
+                            try:
+                                db_bytes = int(stdout.strip())
+                            except (ValueError, TypeError):
+                                pass
+                except Exception:
+                    pass
+            rec.db_size = rec._format_bytes(db_bytes) if db_bytes else ''
+
+            total_bytes = disk_bytes + db_bytes
+            rec.total_storage = rec._format_bytes(total_bytes) if total_bytes else ''
+            rec.usage_last_updated = fields.Datetime.now()
+
+        return True
 
     # ========== Deploy Flow ==========
 

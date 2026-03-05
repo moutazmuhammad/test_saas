@@ -67,6 +67,11 @@
                             type="object" icon="fa-cog"
                             invisible="state != 'running'"/>
 
+                    <!-- Refresh Usage: when running -->
+                    <button name="action_refresh_usage" string="Refresh Usage"
+                            type="object" icon="fa-bar-chart"
+                            invisible="state != 'running'"/>
+
                     <!-- Create Backup: when running -->
                     <button name="action_create_backup" string="Create Backup"
                             type="object"
@@ -116,6 +121,22 @@
                             <field name="admin_password" password="True"/>
                             <field name="db_user"/>
                             <field name="db_password" password="True"/>
+                        </group>
+                    </group>
+
+                    <!-- Resource Usage -->
+                    <group string="Resource Usage"
+                           invisible="state != 'running'">
+                        <group>
+                            <field name="cpu_usage"/>
+                            <field name="ram_usage"/>
+                            <field name="ram_percent"/>
+                        </group>
+                        <group>
+                            <field name="disk_usage"/>
+                            <field name="db_size"/>
+                            <field name="total_storage"/>
+                            <field name="usage_last_updated"/>
                         </group>
                     </group>
 
