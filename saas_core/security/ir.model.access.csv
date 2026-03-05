@@ -7,3 +7,4 @@ access_saas_psql_physical_server,saas.psql.physical.server,model_saas_psql_physi
 access_saas_ssh_key_pair,saas.ssh.key.pair,model_saas_ssh_key_pair,base.group_user,1,1,1,1
 access_saas_docker_container,saas.docker.container,model_saas_docker_container,base.group_user,1,1,1,1
 access_saas_instance_module_line,saas.instance.module.line,model_saas_instance_module_line,base.group_user,1,1,1,1
+access_saas_instance_backup,saas.instance.backup,model_saas_instance_backup,base.group_user,1,1,1,1

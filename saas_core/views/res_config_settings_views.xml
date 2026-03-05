@@ -18,6 +18,40 @@
                             <field name="saas_default_instance_starting_port"/>
                         </setting>
                     </block>
+
+                    <block title="Backup Storage" name="saas_backup_storage_container">
+                        <setting id="saas_backup_provider_setting"
+                                 string="Cloud Provider"
+                                 help="Select the cloud storage provider for automatic backups.">
+                            <field name="saas_backup_provider"/>
+                        </setting>
+                        <setting id="saas_backup_bucket_name_setting"
+                                 string="Bucket Name"
+                                 help="Name of the cloud storage bucket.">
+                            <field name="saas_backup_bucket_name"/>
+                        </setting>
+                        <setting id="saas_backup_region_setting"
+                                 string="Region"
+                                 help="Cloud region (e.g. us-east-1, europe-west1, nyc3).">
+                            <field name="saas_backup_region"/>
+                        </setting>
+                        <setting id="saas_backup_access_key_setting"
+                                 string="Access Key"
+                                 help="Access key ID for authentication.">
+                            <field name="saas_backup_access_key"/>
+                        </setting>
+                        <setting id="saas_backup_secret_key_setting"
+                                 string="Secret Key"
+                                 help="Secret access key for authentication.">
+                            <field name="saas_backup_secret_key" password="True"/>
+                        </setting>
+                        <setting id="saas_backup_endpoint_setting"
+                                 string="Endpoint URL"
+                                 help="Custom endpoint URL. Required for GCS and DigitalOcean Spaces.">
+                            <field name="saas_backup_endpoint"
+                                   placeholder="https://storage.googleapis.com"/>
+                        </setting>
+                    </block>
                 </app>
             </xpath>
         </field>

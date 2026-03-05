@@ -72,13 +72,6 @@
                             type="object"
                             invisible="state != 'running'"/>
 
-                    <!-- Install Modules: when running -->
-                    <button name="action_install_modules"
-                            string="Install Modules"
-                            type="object"
-                            icon="fa-puzzle-piece"
-                            invisible="state != 'running'"/>
-
                     <!-- Delete: when running, stopped, failed, or suspended -->
                     <button name="action_delete_instance" string="Delete"
                             type="object" class="btn-danger"
@@ -171,6 +164,34 @@
                                            options="{'size': [32, 32]}" string=""/>
                                     <field name="name"/>
                                     <field name="technical_name"/>
+                                </list>
+                            </field>
+                        </page>
+                        <page string="Backups">
+                            <field name="backup_ids" nolabel="1">
+                                <list create="0" edit="0" delete="0"
+                                      decoration-success="state == 'done'"
+                                      decoration-danger="state == 'failed'"
+                                      decoration-info="state == 'running'">
+                                    <field name="name"/>
+                                    <field name="create_date" string="Date"/>
+                                    <field name="size_mb"/>
+                                    <field name="state" widget="badge"
+                                           decoration-success="state == 'done'"
+                                           decoration-danger="state == 'failed'"
+                                           decoration-info="state == 'running'"/>
+                                    <field name="download_url" widget="url"
+                                           string="Download"
+                                           invisible="state != 'done'"/>
+                                    <field name="download_url_expiry" string="Link Expires"
+                                           invisible="state != 'done'"/>
+                                    <button name="action_download" type="object"
+                                            string="Download" icon="fa-download"
+                                            invisible="state != 'done'"/>
+                                    <button name="action_delete_backup" type="object"
+                                            string="Delete" icon="fa-trash"
+                                            confirm="This will permanently delete this backup from cloud storage. Continue?"/>
+                                    <field name="error_message" optional="hide"/>
                                 </list>
                             </field>
                         </page>

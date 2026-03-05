@@ -1,6 +1,6 @@
 {
     'name': 'SaaS Instance Manager',
-    'version': '18.0.2.0.0',
+    'version': '18.0.3.0.0',
     'category': 'SaaS',
     'summary': 'Provision and manage multi-tenant Odoo instances with Docker containers',
     'description': """
@@ -25,11 +25,12 @@ Key capabilities:
     'license': 'LGPL-3',
     'depends': ['base', 'mail', 'sale'],
     'external_dependencies': {
-        'python': ['paramiko', 'jinja2'],
+        'python': ['paramiko', 'jinja2', 'boto3'],
     },
     'data': [
         'security/ir.model.access.csv',
         'data/ir_config_parameter.xml',
+        'data/saas_backup_cron.xml',
         'views/saas_instance_views.xml',
         'views/saas_ssh_key_pair_views.xml',
         'views/saas_docker_container_views.xml',

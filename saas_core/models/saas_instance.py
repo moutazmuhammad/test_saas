@@ -137,6 +137,15 @@ class SaasInstance(models.Model):
         help='Module products that have been successfully installed on this instance.',
     )
 
+    # ========== Backups ==========
+    backup_ids = fields.One2many(
+        'saas.instance.backup', 'instance_id',
+        string='Backups',
+    )
+    backup_count = fields.Integer(
+        string='Backup Count', compute='_compute_backup_count',
+    )
+
     # ========== Operations ==========
     provisioning_log = fields.Text(
         string='Provisioning Log',
@@ -220,6 +229,11 @@ class SaasInstance(models.Model):
                 rec.url = 'https://%s.%s' % (rec.subdomain, rec.domain_id.name)
             else:
                 rec.url = ''
+
+    @api.depends('backup_ids')
+    def _compute_backup_count(self):
+        for rec in self:
+            rec.backup_count = len(rec.backup_ids)
 
     # ========== Private Helpers ==========
 
@@ -808,64 +822,11 @@ class SaasInstance(models.Model):
         return True
 
     def action_create_backup(self):
+        self.ensure_one()
+        self.env['saas.instance.backup']._perform_backup(self)
         return True
 
-    def action_install_modules(self):
-        """Install all pending module lines on the running instance."""
-        self.ensure_one()
-        self._ensure_can_ssh()
-        server = self.docker_server_id
-        container_name = self._get_container_name()
 
-        pending_lines = self.module_line_ids.filtered(
-            lambda l: l.state == 'pending'
-        )
-        if not pending_lines:
-            raise UserError(_("No pending modules to install."))
-
-        for line in pending_lines:
-            module_names = line._get_all_technical_names()
-            if not module_names:
-                line.state = 'failed'
-                line.log = 'No modules found for this line.'
-                continue
-
-            names_str = ','.join(sorted(module_names))
-            self._append_log("Installing modules: %s" % names_str)
-
-            install_cmd = (
-                'docker exec %(container)s '
-                'odoo -d %(db_name)s '
-                '-i %(modules)s '
-                '--stop-after-init '
-                '--no-http 2>&1'
-            ) % {
-                'container': container_name,
-                'db_name': self.subdomain,
-                'modules': names_str,
-            }
-
-            with server._get_ssh_connection() as ssh:
-                exit_code, stdout, stderr = ssh.execute(install_cmd, timeout=600)
-
-            if exit_code != 0:
-                line.state = 'failed'
-                line.log = stdout[-1000:] + '\n' + stderr[-500:]
-                self._append_log(
-                    "FAILED installing modules: %s\n%s" % (names_str, line.log)
-                )
-            else:
-                line.state = 'installed'
-                line.log = ''
-                self._append_log("Modules installed successfully: %s" % names_str)
-                all_products = self.env['product.product']
-                if line.product_id:
-                    module_tmpls = line.product_id.product_tmpl_id.saas_module_ids
-                    all_products |= module_tmpls.mapped('product_variant_id')
-                elif line.module_id:
-                    all_products |= line.module_id
-                if all_products:
-                    self.installed_module_ids = [(4, p.id) for p in all_products]
 
     def _get_nginx_template_name(self):
         """Return the appropriate nginx template based on the Odoo version's nginx_template field."""
