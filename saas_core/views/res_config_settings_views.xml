@@ -32,24 +32,37 @@
                         </setting>
                         <setting id="saas_backup_region_setting"
                                  string="Region"
-                                 help="Cloud region (e.g. us-east-1, europe-west1, nyc3).">
+                                 help="Cloud region (e.g. us-east-1, europe-west1, nyc3)."
+                                 invisible="saas_backup_provider == 'gcs'">
                             <field name="saas_backup_region"/>
                         </setting>
                         <setting id="saas_backup_access_key_setting"
                                  string="Access Key"
-                                 help="Access key ID for authentication.">
+                                 help="Access key ID for authentication."
+                                 invisible="saas_backup_provider == 'gcs'">
                             <field name="saas_backup_access_key"/>
                         </setting>
                         <setting id="saas_backup_secret_key_setting"
                                  string="Secret Key"
-                                 help="Secret access key for authentication.">
+                                 help="Secret access key for authentication."
+                                 invisible="saas_backup_provider == 'gcs'">
                             <field name="saas_backup_secret_key" password="True"/>
+                        </setting>
+                        <setting id="saas_backup_service_account_key_setting"
+                                 string="Service Account JSON Key"
+                                 help="Upload the GCP service account key JSON file."
+                                 invisible="saas_backup_provider != 'gcs'">
+                            <field name="saas_backup_service_account_key_file"
+                                   filename="saas_backup_service_account_key_filename"/>
+                            <field name="saas_backup_service_account_key_filename"
+                                   invisible="1"/>
                         </setting>
                         <setting id="saas_backup_endpoint_setting"
                                  string="Endpoint URL"
-                                 help="Custom endpoint URL. Required for GCS and DigitalOcean Spaces.">
+                                 help="Custom S3-compatible endpoint. Required for DigitalOcean Spaces."
+                                 invisible="saas_backup_provider == 'gcs'">
                             <field name="saas_backup_endpoint"
-                                   placeholder="https://storage.googleapis.com"/>
+                                   placeholder="https://nyc3.digitaloceanspaces.com"/>
                         </setting>
                     </block>
                 </app>

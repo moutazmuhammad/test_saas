@@ -25,7 +25,7 @@ Key capabilities:
     'license': 'LGPL-3',
     'depends': ['base', 'mail', 'sale'],
     'external_dependencies': {
-        'python': ['paramiko', 'jinja2', 'boto3'],
+        'python': ['paramiko', 'jinja2', 'boto3', 'google-cloud-storage'],
     },
     'data': [
         'security/ir.model.access.csv',

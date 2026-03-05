@@ -117,9 +117,11 @@ class SSHConnection:
         stdin, stdout, stderr = self._client.exec_command(
             command, timeout=timeout or self.timeout,
         )
-        exit_code = stdout.channel.recv_exit_status()
+        # Read output BEFORE recv_exit_status to avoid deadlock when the
+        # remote command produces large output that fills the SSH buffer.
         stdout_str = stdout.read().decode('utf-8', errors='replace')
         stderr_str = stderr.read().decode('utf-8', errors='replace')
+        exit_code = stdout.channel.recv_exit_status()
         return exit_code, stdout_str, stderr_str
 
     def write_file(self, remote_path, content):
@@ -128,5 +130,14 @@ class SSHConnection:
         try:
             with sftp.file(remote_path, 'w') as f:
                 f.write(content)
+        finally:
+            sftp.close()
+
+    def read_file_bytes(self, remote_path):
+        """Read a remote file and return its contents as bytes via SFTP."""
+        sftp = self._client.open_sftp()
+        try:
+            with sftp.file(remote_path, 'rb') as f:
+                return f.read()
         finally:
             sftp.close()

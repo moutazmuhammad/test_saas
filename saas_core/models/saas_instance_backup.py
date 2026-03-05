@@ -1,4 +1,3 @@
-import base64
 import datetime
 import logging
 
@@ -7,7 +6,7 @@ from odoo.exceptions import UserError
 
 _logger = logging.getLogger(__name__)
 
-BACKUP_RETENTION_DAYS = 7
+MAX_BACKUPS_PER_INSTANCE = 7
 PRESIGNED_URL_EXPIRY = 7 * 24 * 3600
 
 
@@ -78,6 +77,26 @@ class SaasInstanceBackup(models.Model):
     # ------------------------------------------------------------------
     # Cloud storage helpers
     # ------------------------------------------------------------------
+    def _get_backup_config(self):
+        """Return backup configuration from system parameters."""
+        ICP = self.env['ir.config_parameter'].sudo()
+        provider = ICP.get_param('saas_backup.provider', '')
+        bucket = ICP.get_param('saas_backup.bucket_name', '')
+        if not provider or not bucket:
+            raise UserError(_(
+                "Cloud backup is not configured. Go to SaaS Manager > Configuration > Settings "
+                "and fill in the Backup Storage section."
+            ))
+        return {
+            'provider': provider,
+            'bucket': bucket,
+            'access_key': ICP.get_param('saas_backup.access_key', ''),
+            'secret_key': ICP.get_param('saas_backup.secret_key', ''),
+            'region': ICP.get_param('saas_backup.region', ''),
+            'endpoint': ICP.get_param('saas_backup.endpoint', ''),
+            'service_account_key': ICP.get_param('saas_backup.service_account_key', ''),
+        }
+
     def _get_s3_client(self):
         """Return a boto3 S3-compatible client configured from settings."""
         try:
@@ -86,48 +105,95 @@ class SaasInstanceBackup(models.Model):
         except ImportError:
             raise UserError(_("The 'boto3' Python package is required. Install it with: pip install boto3"))
 
-        ICP = self.env['ir.config_parameter'].sudo()
-        provider = ICP.get_param('saas_backup.provider', '')
-        access_key = ICP.get_param('saas_backup.access_key', '')
-        secret_key = ICP.get_param('saas_backup.secret_key', '')
-        region = ICP.get_param('saas_backup.region', '')
-        endpoint = ICP.get_param('saas_backup.endpoint', '')
-        bucket = ICP.get_param('saas_backup.bucket_name', '')
-
-        if not all([provider, access_key, secret_key, bucket]):
+        cfg = self._get_backup_config()
+        if not cfg['access_key'] or not cfg['secret_key']:
             raise UserError(_(
-                "Cloud backup is not configured. Go to SaaS Manager > Configuration > Settings "
-                "and fill in the Backup Storage section."
-            ))
+                "Access Key and Secret Key are required for %s. "
+                "Go to SaaS Manager > Configuration > Settings."
+            ) % cfg['provider'].upper())
 
         kwargs = {
-            'aws_access_key_id': access_key,
-            'aws_secret_access_key': secret_key,
-            'region_name': region or None,
+            'aws_access_key_id': cfg['access_key'],
+            'aws_secret_access_key': cfg['secret_key'],
+            'region_name': cfg['region'] or None,
         }
-        if endpoint:
-            kwargs['endpoint_url'] = endpoint
-        if provider == 'digitalocean':
+        if cfg['endpoint']:
+            kwargs['endpoint_url'] = cfg['endpoint']
+        if cfg['provider'] == 'digitalocean':
             kwargs['config'] = BotoConfig(s3={'addressing_style': 'path'})
 
-        return boto3.client('s3', **kwargs), bucket
+        return boto3.client('s3', **kwargs), cfg['bucket']
+
+    def _get_gcs_client(self):
+        """Return a google-cloud-storage client configured from settings."""
+        try:
+            from google.cloud import storage as gcs_storage
+            from google.oauth2 import service_account
+        except ImportError:
+            raise UserError(_(
+                "The 'google-cloud-storage' Python package is required. "
+                "Install it with: pip install google-cloud-storage"
+            ))
+
+        import json as _json
+
+        cfg = self._get_backup_config()
+        sa_key = cfg['service_account_key']
+        if not sa_key:
+            raise UserError(_(
+                "Service Account JSON Key is required for Google Cloud Storage. "
+                "Go to SaaS Manager > Configuration > Settings."
+            ))
+
+        try:
+            key_info = _json.loads(sa_key)
+        except (ValueError, TypeError):
+            raise UserError(_("Invalid Service Account JSON Key. Please check the format."))
+
+        credentials = service_account.Credentials.from_service_account_info(key_info)
+        client = gcs_storage.Client(credentials=credentials, project=key_info.get('project_id'))
+        return client, cfg['bucket']
 
     def _upload_to_bucket(self, object_key, data_bytes):
-        client, bucket = self._get_s3_client()
-        client.put_object(Bucket=bucket, Key=object_key, Body=data_bytes)
+        cfg = self._get_backup_config()
+        if cfg['provider'] == 'gcs':
+            client, bucket_name = self._get_gcs_client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(object_key)
+            blob.upload_from_string(data_bytes)
+        else:
+            client, bucket = self._get_s3_client()
+            client.put_object(Bucket=bucket, Key=object_key, Body=data_bytes)
 
     def _generate_presigned_url(self):
-        client, bucket = self._get_s3_client()
-        return client.generate_presigned_url(
-            'get_object',
-            Params={'Bucket': bucket, 'Key': self.bucket_path},
-            ExpiresIn=PRESIGNED_URL_EXPIRY,
-        )
+        cfg = self._get_backup_config()
+        if cfg['provider'] == 'gcs':
+            client, bucket_name = self._get_gcs_client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob(self.bucket_path)
+            return blob.generate_signed_url(
+                expiration=datetime.timedelta(seconds=PRESIGNED_URL_EXPIRY),
+                method='GET',
+            )
+        else:
+            client, bucket = self._get_s3_client()
+            return client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': bucket, 'Key': self.bucket_path},
+                ExpiresIn=PRESIGNED_URL_EXPIRY,
+            )
 
     def _delete_from_bucket(self):
         try:
-            client, bucket = self._get_s3_client()
-            client.delete_object(Bucket=bucket, Key=self.bucket_path)
+            cfg = self._get_backup_config()
+            if cfg['provider'] == 'gcs':
+                client, bucket_name = self._get_gcs_client()
+                bucket = client.bucket(bucket_name)
+                blob = bucket.blob(self.bucket_path)
+                blob.delete()
+            else:
+                client, bucket = self._get_s3_client()
+                client.delete_object(Bucket=bucket, Key=self.bucket_path)
         except Exception as e:
             _logger.warning("Failed to delete backup object %s: %s", self.bucket_path, e)
 
@@ -192,11 +258,8 @@ MANIFEST_EOF
 cd "$TMP_DIR"
 zip -r -q "$ZIP_PATH" dump.sql filestore manifest.json
 
-# 5) Base64 to stdout
-base64 "$ZIP_PATH"
-
-# 6) Cleanup
-rm -rf "$TMP_DIR" "$ZIP_PATH"
+# 5) Cleanup temp dir (keep zip for SFTP download)
+rm -rf "$TMP_DIR"
 """.format(
             tmp_dir=tmp_dir,
             zip_path=zip_path,
@@ -221,16 +284,22 @@ rm -rf "$TMP_DIR" "$ZIP_PATH"
             # Remove script
             ssh.execute('rm -f %s' % script_path)
 
-        if exit_code != 0:
-            raise UserError(
-                _("Backup failed on server %s:\n%s") % (docker_server.name, stderr or stdout)
-            )
+            if exit_code != 0:
+                ssh.execute('rm -f %s' % zip_path)
+                raise UserError(
+                    _("Backup failed on server %s:\n%s") % (docker_server.name, stderr or stdout)
+                )
 
-        zip_b64 = stdout.strip()
-        if not zip_b64:
-            raise UserError(_("Backup produced empty output."))
+            # Download zip via SFTP instead of base64 over stdout
+            try:
+                zip_data = ssh.read_file_bytes(zip_path)
+            finally:
+                ssh.execute('rm -f %s' % zip_path)
 
-        return base64.b64decode(zip_b64)
+        if not zip_data:
+            raise UserError(_("Backup produced empty file."))
+
+        return zip_data
 
     # ------------------------------------------------------------------
     # Cron entry point
@@ -242,36 +311,25 @@ rm -rf "$TMP_DIR" "$ZIP_PATH"
         for instance in instances:
             try:
                 self._perform_backup(instance)
-                self.env.cr.commit()
             except Exception as e:
-                self.env.cr.rollback()
                 _logger.error("Backup failed for instance %s: %s", instance.name, e)
-                try:
-                    self.create({
-                        'instance_id': instance.id,
-                        'name': 'backup_%s' % fields.Date.today().isoformat(),
-                        'state': 'failed',
-                        'error_message': str(e),
-                    })
-                    self.env.cr.commit()
-                except Exception:
-                    self.env.cr.rollback()
 
         self._cleanup_old_backups()
 
     def _perform_backup(self, instance):
         """Perform a single backup for an instance."""
-        today_str = fields.Date.today().isoformat()
+        now_str = fields.Datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+        backup_name = 'backup_%s' % now_str
         partner = instance.partner_id
         partner_folder = '%s_%s' % (
             partner.id, self._sanitize_name(partner.name),
         ) if partner else 'no_partner'
         db_name = instance.subdomain
-        object_key = '%s/%s/backup_%s.zip' % (partner_folder, db_name, today_str)
+        object_key = '%s/%s/%s.zip' % (partner_folder, db_name, backup_name)
 
         backup = self.create({
             'instance_id': instance.id,
-            'name': 'backup_%s' % today_str,
+            'name': backup_name,
             'bucket_path': object_key,
             'state': 'running',
         })
@@ -288,29 +346,53 @@ rm -rf "$TMP_DIR" "$ZIP_PATH"
                 'download_url': url,
                 'download_url_expiry': now + datetime.timedelta(seconds=PRESIGNED_URL_EXPIRY),
             })
+            self.env.cr.commit()
         except Exception as e:
+            self.env.cr.rollback()
             backup.write({
                 'state': 'failed',
                 'error_message': str(e),
             })
+            self.env.cr.commit()
             raise
 
     @api.model
     def _cleanup_old_backups(self):
-        """Delete backups older than retention period."""
-        cutoff = fields.Datetime.now() - datetime.timedelta(days=BACKUP_RETENTION_DAYS)
-        old_backups = self.search([
-            ('create_date', '<', cutoff),
-            ('state', '=', 'done'),
+        """Keep at most MAX_BACKUPS_PER_INSTANCE backups per instance.
+
+        Also removes stale 'running' backups older than 1 day.
+        """
+        # Clean up stale 'running' backups older than 1 day (stuck records)
+        stale_cutoff = fields.Datetime.now() - datetime.timedelta(days=1)
+        stale_backups = self.search([
+            ('create_date', '<', stale_cutoff),
+            ('state', '=', 'running'),
         ])
-        for backup in old_backups:
+        for backup in stale_backups:
             try:
-                backup._delete_from_bucket()
                 backup.unlink()
                 self.env.cr.commit()
             except Exception as e:
                 self.env.cr.rollback()
-                _logger.error("Failed to cleanup backup %s: %s", backup.name, e)
+                _logger.error("Failed to cleanup stale backup %s: %s", backup.name, e)
+
+        # Enforce max backups per instance
+        instances = self.env['saas.instance'].search([('state', '=', 'running')])
+        for instance in instances:
+            backups = self.search([
+                ('instance_id', '=', instance.id),
+                ('state', '=', 'done'),
+            ], order='create_date desc')
+            excess = backups[MAX_BACKUPS_PER_INSTANCE:]
+            for backup in excess:
+                try:
+                    if backup.bucket_path:
+                        backup._delete_from_bucket()
+                    backup.unlink()
+                    self.env.cr.commit()
+                except Exception as e:
+                    self.env.cr.rollback()
+                    _logger.error("Failed to cleanup backup %s: %s", backup.name, e)
 
     @staticmethod
     def _sanitize_name(name):

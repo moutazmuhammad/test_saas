@@ -1,4 +1,4 @@
-from odoo import fields, models
+from odoo import api, fields, models
 
 
 class ResConfigSettings(models.TransientModel):
@@ -38,9 +38,39 @@ class ResConfigSettings(models.TransientModel):
         string='Secret Key',
         config_parameter='saas_backup.secret_key',
     )
+    saas_backup_service_account_key_file = fields.Binary(
+        string='Service Account JSON Key',
+        help='Upload the GCP service account key JSON file.',
+    )
+    saas_backup_service_account_key_filename = fields.Char(
+        string='Key Filename',
+    )
     saas_backup_endpoint = fields.Char(
         string='Endpoint URL',
         config_parameter='saas_backup.endpoint',
-        help='Required for GCS and DigitalOcean. '
-             'e.g. https://storage.googleapis.com or https://nyc3.digitaloceanspaces.com',
+        help='Custom S3-compatible endpoint. Required for DigitalOcean Spaces. '
+             'e.g. https://nyc3.digitaloceanspaces.com',
     )
+
+    def set_values(self):
+        res = super().set_values()
+        if self.saas_backup_service_account_key_file:
+            import base64
+            key_json = base64.b64decode(self.saas_backup_service_account_key_file).decode('utf-8')
+            self.env['ir.config_parameter'].sudo().set_param(
+                'saas_backup.service_account_key', key_json,
+            )
+        return res
+
+    @api.model
+    def get_values(self):
+        res = super().get_values()
+        ICP = self.env['ir.config_parameter'].sudo()
+        sa_key = ICP.get_param('saas_backup.service_account_key', '')
+        if sa_key:
+            import base64
+            res['saas_backup_service_account_key_file'] = base64.b64encode(
+                sa_key.encode('utf-8')
+            )
+            res['saas_backup_service_account_key_filename'] = 'service_account.json'
+        return res
