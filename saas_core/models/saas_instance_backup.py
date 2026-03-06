@@ -1,5 +1,6 @@
 import datetime
 import logging
+import shlex
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
@@ -205,7 +206,6 @@ class SaasInstanceBackup(models.Model):
         instance._ensure_can_ssh()
         docker_server = instance.docker_server_id
         container_name = instance._get_container_name()
-        instance_path = instance._get_instance_path()
         db_name = instance.subdomain
         db_server = instance.db_server_id
         db_host = db_server.private_ip_v4 or db_server.ip_v4
@@ -224,68 +224,66 @@ class SaasInstanceBackup(models.Model):
             'instance': instance.name or '',
         }, indent=2)
 
-        script = """#!/bin/bash
+        # Use environment variables instead of embedding credentials in shell script
+        env_vars = {
+            'SAAS_TMP_DIR': tmp_dir,
+            'SAAS_ZIP_PATH': zip_path,
+            'SAAS_CONTAINER': container_name,
+            'SAAS_DB_NAME': db_name,
+            'SAAS_DB_HOST': db_host,
+            'SAAS_DB_PORT': str(db_port),
+            'SAAS_DB_USER': instance.db_user,
+            'SAAS_DB_PASS': instance.db_password,
+        }
+        env_prefix = ' '.join(
+            '%s=%s' % (k, shlex.quote(v)) for k, v in env_vars.items()
+        )
+
+        script = r"""#!/bin/bash
 set -e
 
-TMP_DIR="{tmp_dir}"
-ZIP_PATH="{zip_path}"
-CONTAINER="{container}"
-DB_NAME="{db_name}"
-DB_HOST="{db_host}"
-DB_PORT="{db_port}"
-DB_USER="{db_user}"
-DB_PASS="{db_pass}"
-
-mkdir -p "$TMP_DIR/filestore"
+mkdir -p "$SAAS_TMP_DIR/filestore"
 
 # 1) pg_dump via docker exec (pass PGPASSWORD into the container env)
-docker exec -e PGPASSWORD="$DB_PASS" "$CONTAINER" pg_dump -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" --no-owner > "$TMP_DIR/dump.sql"
+docker exec -e PGPASSWORD="$SAAS_DB_PASS" "$SAAS_CONTAINER" pg_dump \
+    -h "$SAAS_DB_HOST" -p "$SAAS_DB_PORT" -U "$SAAS_DB_USER" \
+    -d "$SAAS_DB_NAME" --no-owner > "$SAAS_TMP_DIR/dump.sql"
 
 # 2) Copy filestore from inside the container using docker cp
-#    Check both the explicit data_dir path and the Odoo default fallback
-if docker exec "$CONTAINER" test -d "/var/lib/odoo/filestore/$DB_NAME" 2>/dev/null; then
-    docker cp "$CONTAINER:/var/lib/odoo/filestore/$DB_NAME/." "$TMP_DIR/filestore/" 2>/dev/null || true
-elif docker exec "$CONTAINER" test -d "/var/lib/odoo/.local/share/Odoo/filestore/$DB_NAME" 2>/dev/null; then
-    docker cp "$CONTAINER:/var/lib/odoo/.local/share/Odoo/filestore/$DB_NAME/." "$TMP_DIR/filestore/" 2>/dev/null || true
+if docker exec "$SAAS_CONTAINER" test -d "/var/lib/odoo/filestore/$SAAS_DB_NAME" 2>/dev/null; then
+    docker cp "$SAAS_CONTAINER:/var/lib/odoo/filestore/$SAAS_DB_NAME/." "$SAAS_TMP_DIR/filestore/" 2>/dev/null || true
+elif docker exec "$SAAS_CONTAINER" test -d "/var/lib/odoo/.local/share/Odoo/filestore/$SAAS_DB_NAME" 2>/dev/null; then
+    docker cp "$SAAS_CONTAINER:/var/lib/odoo/.local/share/Odoo/filestore/$SAAS_DB_NAME/." "$SAAS_TMP_DIR/filestore/" 2>/dev/null || true
 fi
 
 # 3) Write manifest.json
-cat > "$TMP_DIR/manifest.json" << 'MANIFEST_EOF'
-{manifest}
+cat > "$SAAS_TMP_DIR/manifest.json" << 'MANIFEST_EOF'
+%s
 MANIFEST_EOF
 
 # 4) Zip
-cd "$TMP_DIR"
-zip -r -q "$ZIP_PATH" dump.sql filestore manifest.json
+cd "$SAAS_TMP_DIR"
+zip -r -q "$SAAS_ZIP_PATH" dump.sql filestore manifest.json
 
 # 5) Cleanup temp dir (keep zip for SFTP download)
-rm -rf "$TMP_DIR"
-""".format(
-            tmp_dir=tmp_dir,
-            zip_path=zip_path,
-            container=container_name,
-            db_name=db_name,
-            db_host=db_host,
-            db_port=db_port,
-            db_user=instance.db_user,
-            db_pass=instance.db_password,
-            manifest=manifest,
-        )
+rm -rf "$SAAS_TMP_DIR"
+""" % manifest
 
         with docker_server._get_ssh_connection() as ssh:
             # Upload script file to avoid shell quoting issues
             ssh.write_file(script_path, script)
-            ssh.execute('chmod +x %s' % script_path)
+            ssh.execute('chmod +x %s' % shlex.quote(script_path))
 
             exit_code, stdout, stderr = ssh.execute(
-                'bash %s' % script_path, timeout=600,
+                '%s bash %s' % (env_prefix, shlex.quote(script_path)),
+                timeout=600,
             )
 
             # Remove script
-            ssh.execute('rm -f %s' % script_path)
+            ssh.execute('rm -f %s' % shlex.quote(script_path))
 
             if exit_code != 0:
-                ssh.execute('rm -f %s' % zip_path)
+                ssh.execute('rm -f %s' % shlex.quote(zip_path))
                 raise UserError(
                     _("Backup failed on server %s:\n%s") % (docker_server.name, stderr or stdout)
                 )
@@ -294,7 +292,7 @@ rm -rf "$TMP_DIR"
             try:
                 zip_data = ssh.read_file_bytes(zip_path)
             finally:
-                ssh.execute('rm -f %s' % zip_path)
+                ssh.execute('rm -f %s' % shlex.quote(zip_path))
 
         if not zip_data:
             raise UserError(_("Backup produced empty file."))
@@ -310,11 +308,26 @@ rm -rf "$TMP_DIR"
         instances = self.env['saas.instance'].search([('state', '=', 'running')])
         for instance in instances:
             try:
-                self._perform_backup(instance)
+                self._perform_backup_in_new_cursor(instance.id)
             except Exception as e:
                 _logger.error("Backup failed for instance %s: %s", instance.name, e)
 
         self._cleanup_old_backups()
+
+    def _perform_backup_in_new_cursor(self, instance_id):
+        """Run a single backup in a separate cursor to isolate transactions."""
+        new_cr = self.pool.cursor()
+        try:
+            new_env = api.Environment(new_cr, self.env.uid, self.env.context)
+            new_env['saas.instance.backup']._perform_backup(
+                new_env['saas.instance'].browse(instance_id)
+            )
+            new_cr.commit()
+        except Exception:
+            new_cr.rollback()
+            raise
+        finally:
+            new_cr.close()
 
     def _perform_backup(self, instance):
         """Perform a single backup for an instance."""
@@ -333,7 +346,6 @@ rm -rf "$TMP_DIR"
             'bucket_path': object_key,
             'state': 'running',
         })
-        self.env.cr.commit()
 
         try:
             zip_data = backup._create_backup_zip(instance)
@@ -346,14 +358,11 @@ rm -rf "$TMP_DIR"
                 'download_url': url,
                 'download_url_expiry': now + datetime.timedelta(seconds=PRESIGNED_URL_EXPIRY),
             })
-            self.env.cr.commit()
         except Exception as e:
-            self.env.cr.rollback()
             backup.write({
                 'state': 'failed',
                 'error_message': str(e),
             })
-            self.env.cr.commit()
             raise
 
     @api.model
@@ -371,9 +380,7 @@ rm -rf "$TMP_DIR"
         for backup in stale_backups:
             try:
                 backup.unlink()
-                self.env.cr.commit()
             except Exception as e:
-                self.env.cr.rollback()
                 _logger.error("Failed to cleanup stale backup %s: %s", backup.name, e)
 
         # Enforce max backups per instance
@@ -389,9 +396,7 @@ rm -rf "$TMP_DIR"
                     if backup.bucket_path:
                         backup._delete_from_bucket()
                     backup.unlink()
-                    self.env.cr.commit()
                 except Exception as e:
-                    self.env.cr.rollback()
                     _logger.error("Failed to cleanup backup %s: %s", backup.name, e)
 
     @staticmethod

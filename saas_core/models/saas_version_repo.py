@@ -1,4 +1,5 @@
 import logging
+import shlex
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
@@ -121,19 +122,19 @@ class SaasVersionRepo(models.Model):
                 with server._get_ssh_connection() as ssh:
                     # Create parent dir
                     parent = '/'.join(repo_path.rsplit('/', 1)[:-1])
-                    ssh.execute('mkdir -p %s' % parent)
+                    ssh.execute('mkdir -p %s' % shlex.quote(parent))
 
                     # Remove existing if re-cloning
-                    ssh.execute('rm -rf %s' % repo_path)
+                    ssh.execute('rm -rf %s' % shlex.quote(repo_path))
 
                     clone_cmd = (
-                        'git clone --branch %(branch)s --single-branch '
-                        '--depth 1 %(url)s %(path)s 2>&1'
-                    ) % {
-                        'branch': rec.branch,
-                        'url': clone_url,
-                        'path': repo_path,
-                    }
+                        'git clone --branch %s --single-branch '
+                        '--depth 1 %s %s 2>&1'
+                    ) % (
+                        shlex.quote(rec.branch),
+                        shlex.quote(clone_url),
+                        shlex.quote(repo_path),
+                    )
                     exit_code, stdout, stderr = ssh.execute(clone_cmd, timeout=300)
                     if exit_code != 0:
                         rec.state = 'error'
@@ -143,7 +144,7 @@ class SaasVersionRepo(models.Model):
                             % (stdout[-500:], stderr[-500:])
                         )
 
-                    ssh.execute('chmod -R 755 %s' % repo_path)
+                    ssh.execute('chmod -R 755 %s' % shlex.quote(repo_path))
 
                     rec.state = 'cloned'
                     rec.last_pull = fields.Datetime.now()
@@ -173,10 +174,10 @@ class SaasVersionRepo(models.Model):
                 with server._get_ssh_connection() as ssh:
                     ssh.execute(
                         'cd %s && git remote set-url origin %s'
-                        % (repo_path, clone_url)
+                        % (shlex.quote(repo_path), shlex.quote(clone_url))
                     )
                     pull_cmd = 'cd %s && git pull origin %s 2>&1' % (
-                        repo_path, rec.branch,
+                        shlex.quote(repo_path), shlex.quote(rec.branch),
                     )
                     exit_code, stdout, stderr = ssh.execute(pull_cmd, timeout=300)
                     if exit_code != 0:
@@ -223,7 +224,7 @@ class SaasVersionRepo(models.Model):
                     server = rec.version_id._get_container_server()
                     repo_path = rec._get_remote_repo_path(server)
                     with server._get_ssh_connection() as ssh:
-                        ssh.execute('rm -rf %s' % repo_path)
+                        ssh.execute('rm -rf %s' % shlex.quote(repo_path))
                 except Exception:
                     _logger.exception("Failed to remove repo dir for %s", rec.name)
 

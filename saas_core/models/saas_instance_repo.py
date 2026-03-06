@@ -1,4 +1,5 @@
 import logging
+import shlex
 
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError
@@ -124,23 +125,23 @@ class SaasInstanceRepo(models.Model):
                 with server._get_ssh_connection() as ssh:
                     # Create parent directory
                     parent = '/'.join(repo_path.rsplit('/', 1)[:-1])
-                    ssh.execute('mkdir -p %s' % parent)
+                    ssh.execute('mkdir -p %s' % shlex.quote(parent))
 
                     # Remove existing repo dir if re-cloning
-                    ssh.execute('rm -rf %s' % repo_path)
+                    ssh.execute('rm -rf %s' % shlex.quote(repo_path))
 
                     # Clone
                     instance._append_log(
                         "Cloning repo %s (branch: %s)..." % (rec.repo_url, rec.branch)
                     )
                     clone_cmd = (
-                        'git clone --branch %(branch)s --single-branch '
-                        '--depth 1 %(url)s %(path)s 2>&1'
-                    ) % {
-                        'branch': rec.branch,
-                        'url': clone_url,
-                        'path': repo_path,
-                    }
+                        'git clone --branch %s --single-branch '
+                        '--depth 1 %s %s 2>&1'
+                    ) % (
+                        shlex.quote(rec.branch),
+                        shlex.quote(clone_url),
+                        shlex.quote(repo_path),
+                    )
                     exit_code, stdout, stderr = ssh.execute(clone_cmd, timeout=300)
                     if exit_code != 0:
                         rec.state = 'error'
@@ -152,7 +153,7 @@ class SaasInstanceRepo(models.Model):
 
                     # Set permissions
                     ssh.execute(
-                        'chmod -R 755 %s' % repo_path
+                        'chmod -R 755 %s' % shlex.quote(repo_path)
                     )
 
                     instance._append_log("Repository cloned successfully.")
@@ -192,14 +193,14 @@ class SaasInstanceRepo(models.Model):
                     # Update remote URL in case token changed
                     ssh.execute(
                         'cd %s && git remote set-url origin %s'
-                        % (repo_path, clone_url)
+                        % (shlex.quote(repo_path), shlex.quote(clone_url))
                     )
 
                     instance._append_log(
                         "Pulling latest changes for %s..." % rec.name
                     )
                     pull_cmd = 'cd %s && git pull origin %s 2>&1' % (
-                        repo_path, rec.branch,
+                        shlex.quote(repo_path), shlex.quote(rec.branch),
                     )
                     exit_code, stdout, stderr = ssh.execute(pull_cmd, timeout=300)
                     if exit_code != 0:
@@ -237,7 +238,7 @@ class SaasInstanceRepo(models.Model):
                     server = instance.docker_server_id
                     repo_path = rec._get_remote_repo_path()
                     with server._get_ssh_connection() as ssh:
-                        ssh.execute('rm -rf %s' % repo_path)
+                        ssh.execute('rm -rf %s' % shlex.quote(repo_path))
                     instance._append_log("Removed repo directory %s" % repo_path)
                 except Exception:
                     _logger.exception("Failed to remove repo dir for %s", rec.name)

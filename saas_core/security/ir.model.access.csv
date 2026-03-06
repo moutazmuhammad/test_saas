@@ -1,14 +1,25 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_saas_instance,saas.instance,model_saas_instance,base.group_user,1,1,1,1
-access_saas_based_domain,saas.based.domain,model_saas_based_domain,base.group_user,1,1,1,1
-access_saas_odoo_version,saas.odoo.version,model_saas_odoo_version,base.group_user,1,1,1,1
-access_saas_container_physical_server,saas.container.physical.server,model_saas_container_physical_server,base.group_user,1,1,1,1
-access_saas_psql_physical_server,saas.psql.physical.server,model_saas_psql_physical_server,base.group_user,1,1,1,1
-access_saas_ssh_key_pair,saas.ssh.key.pair,model_saas_ssh_key_pair,base.group_user,1,1,1,1
-access_saas_docker_container,saas.docker.container,model_saas_docker_container,base.group_user,1,1,1,1
-access_saas_instance_module_line,saas.instance.module.line,model_saas_instance_module_line,base.group_user,1,1,1,1
-access_saas_instance_backup,saas.instance.backup,model_saas_instance_backup,base.group_user,1,1,1,1
-access_saas_plan,saas.plan,model_saas_plan,base.group_user,1,1,1,1
-access_saas_instance_repo,saas.instance.repo,model_saas_instance_repo,base.group_user,1,1,1,1
-access_saas_version_repo,saas.version.repo,model_saas_version_repo,base.group_user,1,1,1,1
-access_saas_config_viewer,saas.config.viewer,model_saas_config_viewer,base.group_user,1,1,1,1
+access_saas_instance_user,saas.instance user,model_saas_instance,saas_core.group_saas_user,1,0,0,0
+access_saas_instance_manager,saas.instance manager,model_saas_instance,saas_core.group_saas_manager,1,1,1,1
+access_saas_based_domain_user,saas.based.domain user,model_saas_based_domain,saas_core.group_saas_user,1,0,0,0
+access_saas_based_domain_manager,saas.based.domain manager,model_saas_based_domain,saas_core.group_saas_manager,1,1,1,1
+access_saas_odoo_version_user,saas.odoo.version user,model_saas_odoo_version,saas_core.group_saas_user,1,0,0,0
+access_saas_odoo_version_manager,saas.odoo.version manager,model_saas_odoo_version,saas_core.group_saas_manager,1,1,1,1
+access_saas_container_physical_server_user,saas.container.physical.server user,model_saas_container_physical_server,saas_core.group_saas_user,1,0,0,0
+access_saas_container_physical_server_manager,saas.container.physical.server manager,model_saas_container_physical_server,saas_core.group_saas_manager,1,1,1,1
+access_saas_psql_physical_server_user,saas.psql.physical.server user,model_saas_psql_physical_server,saas_core.group_saas_user,1,0,0,0
+access_saas_psql_physical_server_manager,saas.psql.physical.server manager,model_saas_psql_physical_server,saas_core.group_saas_manager,1,1,1,1
+access_saas_ssh_key_pair_manager,saas.ssh.key.pair manager,model_saas_ssh_key_pair,saas_core.group_saas_manager,1,1,1,1
+access_saas_docker_container_user,saas.docker.container user,model_saas_docker_container,saas_core.group_saas_user,1,0,0,0
+access_saas_docker_container_manager,saas.docker.container manager,model_saas_docker_container,saas_core.group_saas_manager,1,1,1,1
+access_saas_instance_module_line_user,saas.instance.module.line user,model_saas_instance_module_line,saas_core.group_saas_user,1,0,0,0
+access_saas_instance_module_line_manager,saas.instance.module.line manager,model_saas_instance_module_line,saas_core.group_saas_manager,1,1,1,1
+access_saas_instance_backup_user,saas.instance.backup user,model_saas_instance_backup,saas_core.group_saas_user,1,0,0,0
+access_saas_instance_backup_manager,saas.instance.backup manager,model_saas_instance_backup,saas_core.group_saas_manager,1,1,1,1
+access_saas_plan_user,saas.plan user,model_saas_plan,saas_core.group_saas_user,1,0,0,0
+access_saas_plan_manager,saas.plan manager,model_saas_plan,saas_core.group_saas_manager,1,1,1,1
+access_saas_instance_repo_user,saas.instance.repo user,model_saas_instance_repo,saas_core.group_saas_user,1,0,0,0
+access_saas_instance_repo_manager,saas.instance.repo manager,model_saas_instance_repo,saas_core.group_saas_manager,1,1,1,1
+access_saas_version_repo_user,saas.version.repo user,model_saas_version_repo,saas_core.group_saas_user,1,0,0,0
+access_saas_version_repo_manager,saas.version.repo manager,model_saas_version_repo,saas_core.group_saas_manager,1,1,1,1
+access_saas_config_viewer_manager,saas.config.viewer manager,model_saas_config_viewer,saas_core.group_saas_manager,1,1,1,1

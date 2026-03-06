@@ -28,6 +28,7 @@ Key capabilities:
         'python': ['paramiko', 'jinja2', 'boto3', 'google-cloud-storage'],
     },
     'data': [
+        'security/saas_security.xml',
         'security/ir.model.access.csv',
         'data/ir_config_parameter.xml',
         'data/saas_backup_cron.xml',

@@ -1,7 +1,9 @@
 import datetime
 import logging
 import os
+import re
 import secrets
+import shlex
 import string
 
 from jinja2 import Environment, FileSystemLoader
@@ -15,6 +17,14 @@ TEMPLATES_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     'templates',
 )
+
+_JINJA_ENV = Environment(
+    loader=FileSystemLoader(TEMPLATES_PATH),
+    keep_trailing_newline=True,
+)
+
+SUBDOMAIN_RE = re.compile(r'^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$')
+DB_USER_RE = re.compile(r'^[a-z_][a-z0-9_]*$')
 
 
 class SaasInstance(models.Model):
@@ -185,6 +195,18 @@ class SaasInstance(models.Model):
         readonly=True,
         help='Total storage: container files + PostgreSQL database.',
     )
+    disk_usage_bytes = fields.Float(
+        string='Container Disk (bytes)',
+        readonly=True,
+    )
+    db_size_bytes = fields.Float(
+        string='Database Size (bytes)',
+        readonly=True,
+    )
+    total_storage_bytes = fields.Float(
+        string='Total Storage (bytes)',
+        readonly=True,
+    )
     usage_last_updated = fields.Datetime(
         string='Usage Last Updated',
         readonly=True,
@@ -238,6 +260,11 @@ class SaasInstance(models.Model):
     # ========== Constraints ==========
     _sql_constraints = [
         (
+            'unique_subdomain_per_domain',
+            'UNIQUE(subdomain, domain_id)',
+            'Subdomain must be unique per domain.',
+        ),
+        (
             'unique_xmlrpc_port_per_server',
             'UNIQUE(docker_server_id, xmlrpc_port)',
             'HTTP port must be unique per Docker server.',
@@ -248,6 +275,16 @@ class SaasInstance(models.Model):
             'Longpolling port must be unique per Docker server.',
         ),
     ]
+
+    @api.constrains('subdomain')
+    def _check_subdomain_format(self):
+        for rec in self:
+            if rec.subdomain and not SUBDOMAIN_RE.match(rec.subdomain):
+                raise ValidationError(
+                    _("Subdomain '%s' is invalid. Use only lowercase letters, "
+                      "digits, and hyphens (max 63 chars, must start/end with alphanumeric).")
+                    % rec.subdomain
+                )
 
     # ========== CRUD Overrides ==========
 
@@ -284,8 +321,14 @@ class SaasInstance(models.Model):
 
     @api.depends('backup_ids')
     def _compute_backup_count(self):
+        data = self.env['saas.instance.backup']._read_group(
+            [('instance_id', 'in', self.ids)],
+            ['instance_id'],
+            ['__count'],
+        )
+        counts = {instance.id: count for instance, count in data}
         for rec in self:
-            rec.backup_count = len(rec.backup_ids)
+            rec.backup_count = counts.get(rec.id, 0)
 
     # ========== Private Helpers ==========
 
@@ -298,7 +341,13 @@ class SaasInstance(models.Model):
         """Generate a db username based on subdomain."""
         self.ensure_one()
         safe_subdomain = self.subdomain.replace('-', '_').replace('.', '_')
-        return 'saas_%s' % safe_subdomain
+        db_user = 'saas_%s' % safe_subdomain
+        if not DB_USER_RE.match(db_user):
+            raise ValidationError(
+                _("Cannot generate a safe database username from subdomain '%s'.")
+                % self.subdomain
+            )
+        return db_user
 
     def _get_partner_code(self):
         """Return partner code for folder naming: partnercode_partnername."""
@@ -333,11 +382,7 @@ class SaasInstance(models.Model):
 
     def _render_template(self, template_name, context):
         """Render a Jinja2 template from the templates/ directory."""
-        env = Environment(
-            loader=FileSystemLoader(TEMPLATES_PATH),
-            keep_trailing_newline=True,
-        )
-        template = env.get_template(template_name)
+        template = _JINJA_ENV.get_template(template_name)
         return template.render(context)
 
     def _get_all_repo_context(self):
@@ -413,18 +458,28 @@ class SaasInstance(models.Model):
         db_password = self.db_password
         db_name = self.subdomain
 
-        sql_password = db_password.replace("'", "''")
+        if not DB_USER_RE.match(db_user):
+            raise ValidationError(
+                _("Database user '%s' contains unsafe characters.") % db_user
+            )
+        if not SUBDOMAIN_RE.match(db_name):
+            raise ValidationError(
+                _("Subdomain '%s' contains unsafe characters for a database name.") % db_name
+            )
 
         sql_script = (
             "DO $body$\n"
             "BEGIN\n"
-            "  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '%(user)s') THEN\n"
-            "    CREATE ROLE %(user)s WITH LOGIN PASSWORD '%(password)s';\n"
+            "  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = %(user_lit)s) THEN\n"
+            "    EXECUTE format('CREATE ROLE %%I WITH LOGIN PASSWORD %%L', %(user_lit)s, %(pass_lit)s);\n"
             "  ELSE\n"
-            "    ALTER ROLE %(user)s WITH LOGIN PASSWORD '%(password)s';\n"
+            "    EXECUTE format('ALTER ROLE %%I WITH LOGIN PASSWORD %%L', %(user_lit)s, %(pass_lit)s);\n"
             "  END IF;\n"
             "END $body$;\n"
-        ) % {'user': db_user, 'password': sql_password}
+        ) % {
+            'user_lit': "$$%s$$" % db_user,
+            'pass_lit': "$$%s$$" % db_password.replace("$$", "$ $"),
+        }
 
         ensure_role_cmd = "sudo -u postgres psql <<'SAAS_END_SQL'\n%s\nSAAS_END_SQL" % sql_script
 
@@ -580,21 +635,16 @@ class SaasInstance(models.Model):
 
             with server._get_ssh_connection() as ssh:
                 # Fetch container CPU & RAM via docker stats table output
-                stats_cmd = 'docker stats --no-stream %s' % container_name
+                stats_cmd = 'docker stats --no-stream %s' % shlex.quote(container_name)
                 exit_code, stdout, stderr = ssh.execute(stats_cmd)
                 if exit_code == 0 and stdout.strip():
                     lines = stdout.strip().splitlines()
                     if len(lines) >= 2:
-                        # Parse the table: CONTAINER ID  NAME  CPU %  MEM USAGE / LIMIT  MEM %  ...
                         values = lines[1].split()
-                        # Find CPU % (contains %)
                         for i, val in enumerate(values):
                             if '%' in val:
                                 rec.cpu_usage = val
-                                # Memory usage is next fields: e.g. "50MiB / 2GiB"
-                                # then mem %
                                 remaining = values[i+1:]
-                                # Find mem usage pattern: "XXMiB" "/" "XXGiB"
                                 if len(remaining) >= 3:
                                     rec.ram_usage = '%s %s %s' % (
                                         remaining[0], remaining[1], remaining[2],
@@ -604,7 +654,7 @@ class SaasInstance(models.Model):
                                 break
 
                 # Fetch disk usage of the instance folder (in bytes)
-                disk_cmd = 'du -sb %s 2>/dev/null | cut -f1' % instance_path
+                disk_cmd = 'du -sb %s 2>/dev/null | cut -f1' % shlex.quote(instance_path)
                 exit_code, stdout, stderr = ssh.execute(disk_cmd)
                 disk_bytes = 0
                 if exit_code == 0 and stdout.strip():
@@ -613,6 +663,7 @@ class SaasInstance(models.Model):
                     except (ValueError, TypeError):
                         pass
                 rec.disk_usage = rec._format_bytes(disk_bytes) if disk_bytes else ''
+                rec.disk_usage_bytes = disk_bytes
 
             # Fetch database size from PostgreSQL server (in bytes)
             db_bytes = 0
@@ -621,8 +672,8 @@ class SaasInstance(models.Model):
                     with rec.db_server_id._get_ssh_connection() as ssh:
                         db_size_cmd = (
                             "sudo -u postgres psql -At -c "
-                            "'SELECT pg_database_size($$%s$$);'"
-                        ) % rec.subdomain
+                            "'SELECT pg_database_size(%s);'"
+                        ) % shlex.quote("$$%s$$" % rec.subdomain)
                         exit_code, stdout, stderr = ssh.execute(db_size_cmd)
                         if exit_code == 0 and stdout.strip():
                             try:
@@ -632,9 +683,11 @@ class SaasInstance(models.Model):
                 except Exception:
                     pass
             rec.db_size = rec._format_bytes(db_bytes) if db_bytes else ''
+            rec.db_size_bytes = db_bytes
 
             total_bytes = disk_bytes + db_bytes
             rec.total_storage = rec._format_bytes(total_bytes) if total_bytes else ''
+            rec.total_storage_bytes = total_bytes
             rec.usage_last_updated = fields.Datetime.now()
 
         return True
@@ -644,6 +697,11 @@ class SaasInstance(models.Model):
     def action_deploy(self):
         """Full deployment flow: provision Docker container over SSH."""
         for rec in self:
+            if rec.state not in ('draft', 'failed'):
+                raise UserError(
+                    _("Cannot deploy instance '%s': must be in Draft or Failed state (current: %s).")
+                    % (rec.subdomain, rec.state)
+                )
             rec._do_deploy()
 
     def _do_deploy(self):
@@ -705,7 +763,7 @@ class SaasInstance(models.Model):
                     'odoo_image': self.odoo_version_id.docker_image,
                     'odoo_version': self.odoo_version_id.docker_image_tag,
                     'subdomain': self.subdomain,
-                    'host_ip': '0.0.0.0',
+                    'host_ip': '127.0.0.1',
                     'xmlrpc_port': self.xmlrpc_port,
                     'longpolling_port': self.longpolling_port,
                     'network_name': 'net_%s' % self.subdomain,
@@ -782,17 +840,17 @@ class SaasInstance(models.Model):
                     "Initializing database with modules: %s" % modules_to_install
                 )
                 init_cmd = (
-                    'cd %(path)s && docker compose run --rm -T odoo '
-                    'odoo -d %(db_name)s '
-                    '-i %(modules)s '
+                    'cd %s && docker compose run --rm -T odoo '
+                    'odoo -d %s '
+                    '-i %s '
                     '--without-demo=all '
                     '--stop-after-init '
                     '--no-http 2>&1'
-                ) % {
-                    'path': instance_path,
-                    'db_name': self.subdomain,
-                    'modules': modules_to_install,
-                }
+                ) % (
+                    shlex.quote(instance_path),
+                    shlex.quote(self.subdomain),
+                    shlex.quote(modules_to_install),
+                )
                 exit_code, stdout, stderr = ssh.execute(init_cmd, timeout=600)
                 self._append_log(
                     "Install output (last 1000 chars):\n%s"
@@ -823,7 +881,7 @@ class SaasInstance(models.Model):
 
                 # Start the server
                 self._append_log("Starting container with docker compose up -d...")
-                up_cmd = 'cd %s && docker compose up -d 2>&1' % instance_path
+                up_cmd = 'cd %s && docker compose up -d 2>&1' % shlex.quote(instance_path)
                 exit_code, stdout, stderr = ssh.execute(up_cmd)
                 self._append_log(
                     "docker compose up output:\n%s\n%s" % (stdout, stderr)
@@ -846,11 +904,11 @@ class SaasInstance(models.Model):
                     '  sleep 2; '
                     'done; '
                     'echo "TIMEOUT"; exit 1'
-                ) % container_name
+                ) % shlex.quote(container_name)
                 exit_code, stdout, stderr = ssh.execute(wait_cmd)
                 if exit_code != 0 or 'READY' not in stdout:
                     _ec, logs_out, _err = ssh.execute(
-                        'docker logs --tail 50 %s 2>&1' % container_name
+                        'docker logs --tail 50 %s 2>&1' % shlex.quote(container_name)
                     )
                     self._append_log(
                         "Container failed to start.\n"
@@ -890,12 +948,17 @@ class SaasInstance(models.Model):
     def action_stop(self):
         """Stop the Docker container and set state to stopped."""
         for rec in self:
+            if rec.state != 'running':
+                raise UserError(
+                    _("Cannot stop instance '%s': must be in Running state (current: %s).")
+                    % (rec.subdomain, rec.state)
+                )
             rec._ensure_can_ssh()
             server = rec.docker_server_id
             container_name = rec._get_container_name()
             with server._get_ssh_connection() as ssh:
                 exit_code, stdout, stderr = ssh.execute(
-                    'docker stop %s' % container_name,
+                    'docker stop %s' % shlex.quote(container_name),
                 )
                 if exit_code != 0:
                     raise UserError(
@@ -907,12 +970,17 @@ class SaasInstance(models.Model):
     def action_restart(self):
         """Restart the Docker container via SSH."""
         for rec in self:
+            if rec.state not in ('running', 'stopped', 'suspended'):
+                raise UserError(
+                    _("Cannot restart instance '%s': must be Running, Stopped, or Suspended (current: %s).")
+                    % (rec.subdomain, rec.state)
+                )
             rec._ensure_can_ssh()
             server = rec.docker_server_id
             container_name = rec._get_container_name()
             with server._get_ssh_connection() as ssh:
                 exit_code, stdout, stderr = ssh.execute(
-                    'docker restart %s' % container_name,
+                    'docker restart %s' % shlex.quote(container_name),
                 )
                 if exit_code != 0:
                     raise UserError(
@@ -925,6 +993,11 @@ class SaasInstance(models.Model):
         """Redeploy: clone pending repos, pull cloned repos, update config/mounts,
         install pending modules, and restart the container."""
         for rec in self:
+            if rec.state not in ('running', 'stopped', 'suspended'):
+                raise UserError(
+                    _("Cannot redeploy instance '%s': must be Running, Stopped, or Suspended (current: %s).")
+                    % (rec.subdomain, rec.state)
+                )
             rec._ensure_can_ssh()
             server = rec.docker_server_id
             instance_path = rec._get_instance_path()
@@ -943,11 +1016,11 @@ class SaasInstance(models.Model):
                         clone_url = repo._get_clone_url()
                         ssh.execute(
                             'cd %s && git remote set-url origin %s'
-                            % (repo_path, clone_url)
+                            % (shlex.quote(repo_path), shlex.quote(clone_url))
                         )
                         rec._append_log("Pulling %s..." % repo.name)
                         pull_cmd = 'cd %s && git pull origin %s 2>&1' % (
-                            repo_path, repo.branch,
+                            shlex.quote(repo_path), shlex.quote(repo.branch),
                         )
                         exit_code, stdout, stderr = ssh.execute(
                             pull_cmd, timeout=300,
@@ -994,7 +1067,7 @@ class SaasInstance(models.Model):
                     'odoo_image': rec.odoo_version_id.docker_image,
                     'odoo_version': rec.odoo_version_id.docker_image_tag,
                     'subdomain': rec.subdomain,
-                    'host_ip': '0.0.0.0',
+                    'host_ip': '127.0.0.1',
                     'xmlrpc_port': rec.xmlrpc_port,
                     'longpolling_port': rec.longpolling_port,
                     'network_name': 'net_%s' % rec.subdomain,
@@ -1061,17 +1134,17 @@ class SaasInstance(models.Model):
                     )
                     with server._get_ssh_connection() as ssh:
                         install_cmd = (
-                            'cd %(path)s && docker compose run --rm -T odoo '
-                            'odoo -d %(db_name)s '
-                            '-i %(modules)s '
+                            'cd %s && docker compose run --rm -T odoo '
+                            'odoo -d %s '
+                            '-i %s '
                             '--without-demo=all '
                             '--stop-after-init '
                             '--no-http 2>&1'
-                        ) % {
-                            'path': instance_path,
-                            'db_name': rec.subdomain,
-                            'modules': modules_to_install,
-                        }
+                        ) % (
+                            shlex.quote(instance_path),
+                            shlex.quote(rec.subdomain),
+                            shlex.quote(modules_to_install),
+                        )
                         exit_code, stdout, stderr = ssh.execute(
                             install_cmd, timeout=600,
                         )
@@ -1108,12 +1181,17 @@ class SaasInstance(models.Model):
     def action_suspend(self):
         """Stop container and set state to suspended."""
         for rec in self:
+            if rec.state != 'running':
+                raise UserError(
+                    _("Cannot suspend instance '%s': must be in Running state (current: %s).")
+                    % (rec.subdomain, rec.state)
+                )
             rec._ensure_can_ssh()
             server = rec.docker_server_id
             container_name = rec._get_container_name()
             with server._get_ssh_connection() as ssh:
                 exit_code, stdout, stderr = ssh.execute(
-                    'docker stop %s' % container_name,
+                    'docker stop %s' % shlex.quote(container_name),
                 )
                 if exit_code != 0:
                     raise UserError(
@@ -1149,34 +1227,43 @@ class SaasInstance(models.Model):
             if db_name:
                 drop_db_cmd = (
                     "sudo -u postgres psql -tc "
-                    "\"SELECT 1 FROM pg_database WHERE datname='%(db)s'\" "
+                    "\"SELECT 1 FROM pg_database WHERE datname=%s\" "
                     "| grep -q 1 "
-                    "&& sudo -u postgres dropdb %(db)s"
-                ) % {'db': db_name}
+                    "&& sudo -u postgres dropdb %s"
+                ) % (shlex.quote("'%s'" % db_name), shlex.quote(db_name))
                 ssh.execute(drop_db_cmd)
 
             if db_user:
                 drop_role_cmd = (
                     "sudo -u postgres psql -tc "
-                    "\"SELECT 1 FROM pg_roles WHERE rolname='%(user)s'\" "
+                    "\"SELECT 1 FROM pg_roles WHERE rolname=%s\" "
                     "| grep -q 1 "
-                    "&& sudo -u postgres dropuser %(user)s"
-                ) % {'user': db_user}
+                    "&& sudo -u postgres dropuser %s"
+                ) % (shlex.quote("'%s'" % db_user), shlex.quote(db_user))
                 ssh.execute(drop_role_cmd)
 
     def action_delete_instance(self):
         """Remove container, volumes, network, database, db user, and instance folder."""
         for rec in self:
+            if rec.state == 'provisioning':
+                raise UserError(
+                    _("Cannot delete instance '%s' while it is being provisioned.")
+                    % rec.subdomain
+                )
             rec._ensure_can_ssh()
             server = rec.docker_server_id
             instance_path = rec._get_instance_path()
 
             with server._get_ssh_connection() as ssh:
-                down_cmd = 'cd %s && docker compose down -v --remove-orphans 2>&1' % instance_path
-                ssh.execute(down_cmd)
+                down_cmd = 'cd %s && docker compose down -v --remove-orphans 2>&1' % shlex.quote(instance_path)
+                exit_code, stdout, stderr = ssh.execute(down_cmd)
+                if exit_code != 0:
+                    _logger.warning(
+                        "docker compose down failed for %s: %s", rec.subdomain, stderr
+                    )
 
                 exit_code, stdout, stderr = ssh.execute(
-                    'rm -rf %s' % instance_path,
+                    'rm -rf %s' % shlex.quote(instance_path),
                 )
                 if exit_code != 0:
                     raise UserError(
@@ -1184,10 +1271,15 @@ class SaasInstance(models.Model):
                         % (instance_path, stderr)
                     )
 
-                # Remove Nginx config and reload
+                # Remove Nginx config and SSL certificate
                 nginx_path = '/etc/nginx/sites-enabled/%s' % rec.subdomain
-                ssh.execute('rm -f %s' % nginx_path)
+                ssh.execute('rm -f %s' % shlex.quote(nginx_path))
                 ssh.execute('systemctl reload nginx 2>&1')
+                if rec.name:
+                    ssh.execute(
+                        'certbot delete --cert-name %s --non-interactive 2>&1'
+                        % shlex.quote(rec.name)
+                    )
 
             rec._drop_postgresql()
 
@@ -1214,7 +1306,7 @@ class SaasInstance(models.Model):
         conf_path = '%s/config/odoo.conf' % instance_path
 
         with server._get_ssh_connection() as ssh:
-            exit_code, stdout, stderr = ssh.execute('cat %s' % conf_path)
+            exit_code, stdout, stderr = ssh.execute('cat %s' % shlex.quote(conf_path))
             if exit_code != 0:
                 raise UserError(
                     _("Failed to read odoo.conf:\n%s") % stderr
@@ -1253,10 +1345,10 @@ class SaasInstance(models.Model):
         # Step 1: Obtain SSL certificate via Certbot
         self._append_log("Requesting SSL certificate for %s..." % domain)
         certbot_cmd = (
-            'certbot certonly --nginx -d %(domain)s '
+            'certbot certonly --nginx -d %s '
             '--non-interactive --agree-tos '
             '--register-unsafely-without-email 2>&1'
-        ) % {'domain': domain}
+        ) % shlex.quote(domain)
         exit_code, stdout, stderr = ssh.execute(certbot_cmd, timeout=120)
         if exit_code != 0:
             # Try standalone mode as fallback
@@ -1264,10 +1356,10 @@ class SaasInstance(models.Model):
                 "Certbot --nginx failed, trying standalone mode..."
             )
             certbot_cmd = (
-                'certbot certonly --standalone -d %(domain)s '
+                'certbot certonly --standalone -d %s '
                 '--non-interactive --agree-tos '
                 '--register-unsafely-without-email 2>&1'
-            ) % {'domain': domain}
+            ) % shlex.quote(domain)
             exit_code, stdout, stderr = ssh.execute(certbot_cmd, timeout=120)
             if exit_code != 0:
                 raise UserError(
@@ -1296,7 +1388,7 @@ class SaasInstance(models.Model):
         exit_code, stdout, stderr = ssh.execute('nginx -t 2>&1')
         if exit_code != 0:
             # Remove the broken config to avoid breaking other sites
-            ssh.execute('rm -f %s' % nginx_path)
+            ssh.execute('rm -f %s' % shlex.quote(nginx_path))
             raise UserError(
                 _("Nginx configuration test failed:\n%s\n%s")
                 % (stdout, stderr)
@@ -1333,8 +1425,7 @@ class SaasInstance(models.Model):
         for instance in instances:
             try:
                 instance.action_refresh_usage()
-                total_str = instance.total_storage or ''
-                total_bytes = instance._parse_storage_to_bytes(total_str)
+                total_bytes = instance.total_storage_bytes
                 limit_bytes = instance.plan_id.storage_limit * (1024 ** 3)
                 if total_bytes > limit_bytes:
                     instance.action_suspend()
@@ -1346,38 +1437,21 @@ class SaasInstance(models.Model):
                         body=_(
                             "Instance automatically suspended: total storage (%(used)s) "
                             "exceeds plan limit (%(limit).2f GB).",
-                            used=total_str,
+                            used=instance.total_storage or '',
                             limit=instance.plan_id.storage_limit,
                         ),
                         message_type='notification',
                     )
                     _logger.info(
-                        "Instance %s suspended: storage %s exceeds %.2f GB limit",
-                        instance.subdomain, total_str, instance.plan_id.storage_limit,
+                        "Instance %s suspended: storage %.2f GB exceeds %.2f GB limit",
+                        instance.subdomain, total_bytes / (1024 ** 3),
+                        instance.plan_id.storage_limit,
                     )
             except Exception:
                 _logger.exception(
                     "Failed to check storage for instance %s (id=%s)",
                     instance.subdomain, instance.id,
                 )
-
-    @staticmethod
-    def _parse_storage_to_bytes(size_str):
-        """Parse a human-readable size string (e.g. '1.5 GB', '512 MB') to bytes."""
-        if not size_str:
-            return 0
-        size_str = size_str.strip().upper()
-        multipliers = {'B': 1, 'KB': 1024, 'MB': 1024 ** 2, 'GB': 1024 ** 3, 'TB': 1024 ** 4}
-        for suffix, mult in sorted(multipliers.items(), key=lambda x: -len(x[0])):
-            if size_str.endswith(suffix):
-                try:
-                    return float(size_str[:-len(suffix)].strip()) * mult
-                except ValueError:
-                    return 0
-        try:
-            return float(size_str)
-        except ValueError:
-            return 0
 
     # ========== Repo Management ==========
 
@@ -1449,14 +1523,14 @@ class SaasInstance(models.Model):
         with server._get_ssh_connection() as ssh:
             self._append_log("Restarting container...")
             # Use docker compose down + up to pick up volume changes
-            down_cmd = 'cd %s && docker compose down 2>&1' % instance_path
+            down_cmd = 'cd %s && docker compose down 2>&1' % shlex.quote(instance_path)
             exit_code, stdout, stderr = ssh.execute(down_cmd)
             if exit_code != 0:
                 raise UserError(
                     _("docker compose down failed:\n%s\n%s") % (stdout, stderr)
                 )
 
-            up_cmd = 'cd %s && docker compose up -d 2>&1' % instance_path
+            up_cmd = 'cd %s && docker compose up -d 2>&1' % shlex.quote(instance_path)
             exit_code, stdout, stderr = ssh.execute(up_cmd)
             if exit_code != 0:
                 raise UserError(
@@ -1465,8 +1539,3 @@ class SaasInstance(models.Model):
             self._append_log("Container restarted successfully.")
 
 
-    def action_get_users(self):
-        return True
-
-    def action_get_apps(self):
-        return True

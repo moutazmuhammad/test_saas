@@ -1,5 +1,6 @@
 import json
 import logging
+import shlex
 import select
 
 from werkzeug.exceptions import NotFound, Forbidden
@@ -18,12 +19,13 @@ class ContainerLogsController(http.Controller):
         '/saas/instance/<int:instance_id>/logs/stream',
         type='http',
         auth='user',
-        cors='*',
     )
     def stream_instance_logs(self, instance_id, tail='100', **kwargs):
         instance = request.env['saas.instance'].browse(instance_id)
         if not instance.exists():
             raise NotFound()
+        instance.check_access_rights('read')
+        instance.check_access_rule('read')
         return self._stream(
             instance.docker_server_id, instance._get_container_name(), tail,
         )
@@ -32,16 +34,18 @@ class ContainerLogsController(http.Controller):
         '/saas/container/<int:container_id>/logs/stream',
         type='http',
         auth='user',
-        cors='*',
     )
     def stream_logs(self, container_id, tail='100', **kwargs):
         container = request.env['saas.docker.container'].browse(container_id)
         if not container.exists():
             raise NotFound()
+        container.check_access_rights('read')
+        container.check_access_rule('read')
         return self._stream(container.server_id, container.name, tail)
 
     def _stream(self, server, container_name, tail):
         ssh_conn = server._get_ssh_connection()
+        safe_name = shlex.quote(container_name)
 
         def generate():
             try:
@@ -49,7 +53,7 @@ class ContainerLogsController(http.Controller):
                 transport = ssh_conn._client.get_transport()
                 channel = transport.open_session()
                 channel.exec_command(
-                    'docker logs -f --tail %s %s 2>&1' % (int(tail), container_name)
+                    'docker logs -f --tail %s %s 2>&1' % (int(tail), safe_name)
                 )
                 channel.settimeout(STREAM_TIMEOUT)
 

@@ -1,3 +1,5 @@
+import shlex
+
 from odoo import fields, models, _
 from odoo.exceptions import UserError
 
@@ -56,7 +58,7 @@ class SaasDockerContainer(models.Model):
         server = self.server_id
         with server._get_ssh_connection() as ssh:
             exit_code, stdout, stderr = ssh.execute(
-                'docker stop %s' % self.name,
+                'docker stop %s' % shlex.quote(self.name),
             )
             if exit_code != 0:
                 raise UserError(
@@ -70,7 +72,7 @@ class SaasDockerContainer(models.Model):
         server = self.server_id
         with server._get_ssh_connection() as ssh:
             exit_code, stdout, stderr = ssh.execute(
-                'docker restart %s' % self.name,
+                'docker restart %s' % shlex.quote(self.name),
             )
             if exit_code != 0:
                 raise UserError(
